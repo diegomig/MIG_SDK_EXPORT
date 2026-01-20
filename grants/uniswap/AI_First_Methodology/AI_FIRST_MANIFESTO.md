@@ -228,6 +228,6 @@ The MIG Topology SDK is proof that AI-First Development works: a production-read
 
 ---
 
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)  
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)  
 **Documentation**: See `docs/AI_WORKFLOW.md` for detailed workflow documentation  
 **License**: MIT OR Apache-2.0 (Open Source)

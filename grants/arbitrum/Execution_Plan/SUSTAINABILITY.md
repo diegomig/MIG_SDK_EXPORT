@@ -264,6 +264,6 @@ With this commitment, the SDK will continue to serve the Arbitrum ecosystem for 
 
 ---
 
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)  
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)  
 **License**: MIT OR Apache-2.0 (Open Source)  
 **Contact**: GitHub Issues for support and contributions

@@ -8,12 +8,13 @@
 
 ## Budget Allocation Overview
 
-| Milestone | Allocation | Percentage | Payment Trigger |
-|-----------|-----------|------------|----------------|
-| Milestone 1: Enhanced Uniswap V2/V3 Support | $30,000 ARB | 40% | Completion + verification |
-| Milestone 2: Uniswap Analytics Dashboard | $30,000 ARB | 40% | Completion + verification |
-| Milestone 3: V4 Preparation & Protocol Integrations | $15,000 ARB | 20% | Completion + verification |
-| **Total** | **$75,000 ARB** | **100%** | Milestone-based |
+| Payment | Allocation | Percentage | Payment Trigger |
+|---------|-----------|------------|----------------|
+| **Upfront Payment** | **$15,000 USD** | **20%** | Upon grant approval |
+| Milestone 1: Enhanced Uniswap V2/V3 Support | $25,000 USD | 33% | Completion + verification |
+| Milestone 2: Uniswap Analytics Dashboard | $25,000 USD | 33% | Completion + verification |
+| Milestone 3: V4 Preparation & Protocol Integrations | $10,000 USD | 14% | Completion + verification |
+| **Total** | **$75,000 USD** | **100%** | Upfront + milestone-based |
 
 ---
 
@@ -34,21 +35,38 @@
 
 ---
 
-## Detailed Breakdown by Milestone
+## Detailed Breakdown by Payment
 
-### Milestone 1: Enhanced Uniswap V2/V3 Support ($30,000 USD)
+### Upfront Payment ($15,000 USD)
 
-**Duration**: 6-8 weeks
+**Trigger**: Upon grant approval  
+**Purpose**: Setup, infrastructure, and initial advisory engagement
 
 | Item | Allocation | Description |
 |------|-----------|-------------|
-| Development Time | $17,000 | Workspace refactor (if first grant), advanced tick math library, TWAP integration, fee tier analysis, liquidity concentration analysis |
-| AI-First Framework Setup | $1,000 | AI-first workflow setup, development infrastructure, mathematical validation framework |
-| External Advisory (Uniswap Expertise) | $6,000 | Uniswap protocol expert review, tick math validation, TWAP integration review |
+| External Advisory (Initial Engagement) | $6,000 | Uniswap protocol expert engagement, initial architecture review, scope validation |
+| Infrastructure Setup | $3,000 | Development environment setup, CI/CD initial configuration, testing framework |
+| AI-First Framework Setup | $2,000 | AI-first workflow setup, validation framework, documentation infrastructure |
+| Workspace Refactor (if needed) | $3,000 | Rust workspace refactor to separate `mig-core` and `mig-adapter-uniswap` crates |
+| Project Management & Planning | $1,000 | Milestone planning, communication setup, reporting infrastructure |
+
+**Subtotal**: $15,000 USD
+
+---
+
+### Milestone 1: Enhanced Uniswap V2/V3 Support ($25,000 USD)
+
+**Duration**: 6-8 weeks  
+**Payment Trigger**: Completion + verification
+
+| Item | Allocation | Description |
+|------|-----------|-------------|
+| Development Time | $14,000 | Advanced tick math library, TWAP integration, fee tier analysis, liquidity concentration analysis |
+| External Advisory (Uniswap Expertise) | $5,000 | Tick math validation, TWAP integration review, ongoing protocol expertise |
 | Mathematical Validation | $3,000 | Validation against Uniswap V3 reference implementation, property-based testing |
 | Documentation | $3,000 | Rustdocs, Uniswap features guide, mathematical correctness documentation |
 
-**Subtotal**: $30,000 ARB
+**Subtotal**: $25,000 USD
 
 ---
 
@@ -68,18 +86,19 @@
 
 ---
 
-### Milestone 3: Uniswap V4 Preparation & Protocol Integrations ($15,000 ARB)
+### Milestone 3: Uniswap V4 Preparation & Protocol Integrations ($10,000 USD)
 
-**Duration**: 4-6 weeks
+**Duration**: 4-6 weeks  
+**Payment Trigger**: Completion + verification
 
 | Item | Allocation | Description |
 |------|-----------|-------------|
-| V4 Development | $6,000 | Hooks architecture support, singleton pool architecture support, V4 preparation |
-| Protocol Integration Examples | $5,000 | 3 protocol integration examples (lending, analytics, research), documentation |
-| External Advisory (V4 Expertise) | $2,500 | V4 architecture validation, hooks pattern review, singleton pattern review |
-| Documentation | $1,500 | V4 preparation guide, protocol integration tutorials, best practices, migration guide |
+| V4 Development | $4,500 | Hooks architecture support, singleton pool architecture support, V4 preparation |
+| Protocol Integration Examples | $3,500 | 3 protocol integration examples (lending, analytics, research), documentation |
+| External Advisory (V4 Expertise) | $1,500 | V4 architecture validation, hooks pattern review, singleton pattern review |
+| Documentation | $500 | V4 preparation guide, protocol integration tutorials, best practices |
 
-**Subtotal**: $15,000 ARB
+**Subtotal**: $10,000 USD
 
 ---
 

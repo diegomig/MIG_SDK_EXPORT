@@ -244,6 +244,6 @@ With this commitment, the SDK will continue to serve the Uniswap ecosystem on Ar
 
 ---
 
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)  
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)  
 **License**: MIT OR Apache-2.0 (Open Source)  
 **Focus**: Uniswap V2/V3/V4 on Arbitrum

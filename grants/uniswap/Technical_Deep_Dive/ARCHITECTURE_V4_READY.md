@@ -259,7 +259,7 @@ With this preparation, the SDK will be ready for Uniswap V4 launch, enabling pro
 
 ---
 
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)  
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)  
 **License**: MIT OR Apache-2.0 (Open Source)  
 **Focus**: Uniswap V2/V3/V4 on Arbitrum  
 **V4 Status**: Preparation (this grant), Integration (post-launch)

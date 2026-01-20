@@ -82,7 +82,7 @@
 ## Conditional: Workspace Refactor
 
 **If this is the first approved grant**:
-- Milestone 1 includes workspace refactor (2-3 weeks, ~$2-3k ARB)
+- Milestone 1 includes workspace refactor (2-3 weeks, ~$2-3k USD)
 - Extract `mig-core` and create `mig-adapter-uniswap` crate
 - Establish crate boundaries
 

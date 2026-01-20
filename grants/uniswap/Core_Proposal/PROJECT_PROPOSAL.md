@@ -244,6 +244,6 @@ With external advisory validation and milestone-based delivery, we will deliver 
 
 ---
 
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)  
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)  
 **License**: MIT OR Apache-2.0 (Open Source)  
 **Focus**: Uniswap V2/V3/V4 on Arbitrum

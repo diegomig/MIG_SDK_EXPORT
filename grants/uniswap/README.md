@@ -70,7 +70,7 @@ All technical documentation is available in the main repository:
 - Architecture: [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
 - Roadmap: [`docs/ROADMAP.md`](../../docs/ROADMAP.md)
 - Uniswap Adapters: `src/adapters/uniswap_v2.rs`, `src/adapters/uniswap_v3.rs`
-- Repository: [GitHub Repository](https://github.com/mig-labs/mig-topology-sdk)
+- Repository: [GitHub Repository](https://github.com/diegomig/MIG_SDK_EXPORT)
 
 ---
 

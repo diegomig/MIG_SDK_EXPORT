@@ -41,7 +41,20 @@ The **MIG Topology SDK** is a production-grade Rust library for real-time liquid
 
 ## Grant Scope & Deliverables
 
-### Milestone 1: Enhanced Uniswap V2/V3 Support ($30,000 USD | 6-8 weeks)
+### Upfront Payment: Setup & Infrastructure ($15,000 USD | Day 0)
+
+**Trigger:** Upon grant approval
+
+**Deliverables:**
+- External advisory engagement (Uniswap protocol experts)
+- Infrastructure setup (CI/CD, testing framework, benchmarks)
+- AI-first framework configuration
+- Workspace refactor (if needed: separate `mig-core` and `mig-adapter-uniswap` crates)
+- Project management and reporting infrastructure
+
+---
+
+### Milestone 1: Enhanced Uniswap V2/V3 Support ($25,000 USD | 6-8 weeks)
 
 **Deliverables:**
 - Advanced tick math library (100% accuracy vs. Uniswap V3 reference)
@@ -56,7 +69,7 @@ The **MIG Topology SDK** is a production-grade Rust library for real-time liquid
 - 📊 100% public API documentation coverage
 - 📊 Positive validation from 2+ external Uniswap protocol experts
 
-### Milestone 2: Uniswap Analytics Dashboard ($30,000 USD | 6-8 weeks)
+### Milestone 2: Uniswap Analytics Dashboard ($25,000 USD | 6-8 weeks)
 
 **Deliverables:**
 - Real-time analytics dashboard (Rust backend + JavaScript frontend)
@@ -91,14 +104,20 @@ The **MIG Topology SDK** is a production-grade Rust library for real-time liquid
 
 | Category | Total | Percentage |
 |----------|-------|------------|
-| Development Time | $36,000 | 48% |
-| External Advisory (Uniswap Expertise) | $12,500 | 17% |
-| Analytics Dashboard (Backend + Frontend) | $22,000 | 29% |
+| Development Time | $27,500 | 37% |
+| External Advisory (Uniswap Expertise) | $15,500 | 21% |
+| Analytics Dashboard (Backend + Frontend) | $19,000 | 25% |
 | Testing & Validation | $3,000 | 4% |
-| Documentation | $6,500 | 9% |
+| Documentation | $5,500 | 7% |
+| Infrastructure Setup | $4,000 | 5% |
+| Project Management | $1,000 | 1% |
 | **Total** | **$75,000** | **100%** |
 
-**Payment Structure**: Milestone-based payments (3 milestones: $30k / $30k / $15k)
+**Payment Structure**: 
+- Upfront: $15,000 (20%) - Upon grant approval
+- Milestone 1: $25,000 (33%) - After completion + verification
+- Milestone 2: $25,000 (33%) - After completion + verification  
+- Milestone 3: $10,000 (14%) - After completion + verification
 
 ---
 
@@ -131,6 +150,16 @@ The **MIG Topology SDK** is a production-grade Rust library for real-time liquid
 | **Support Ecosystem Growth** | Open-source analytics dashboard provides ecosystem insights |
 | **Prepare for V4 Launch** | Early V4 preparation enables Day 1 ecosystem readiness |
 | **Expand to L2s** | Optimized for Arbitrum (fastest growing Uniswap L2) |
+
+---
+
+## Other Funding
+
+**Current Status:** This is our only active grant application.
+
+**Scope:** This grant covers both Uniswap-specific features (tick math, TWAP, analytics dashboard, V4 preparation) and the necessary infrastructure to support these features (RPC optimization, caching, observability).
+
+**Rationale:** Rather than splitting infrastructure and protocol features across multiple grants, we've consolidated everything into a single comprehensive Uniswap-focused proposal. This ensures faster delivery and tighter integration between core infrastructure and Uniswap-specific functionality.
 
 ---
 
@@ -193,7 +222,7 @@ The **MIG Topology SDK** is a production-grade Rust library for real-time liquid
 
 ## Application Details
 
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)  
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)  
 **License**: MIT OR Apache-2.0 (Open Source)  
 **Current Status**: Phase 1 complete (core infrastructure), ready for Uniswap-specific enhancements  
 **Application Portal**: [Uniswap Foundation Grantee Toolkit](https://www.uniswapfoundation.org/grantee-toolkit)
@@ -203,10 +232,10 @@ The **MIG Topology SDK** is a production-grade Rust library for real-time liquid
 ## Contact Information
 
 **Organization**: MIG Labs  
-**Project Lead**: [Name]  
-**Email**: [Email]  
-**GitHub**: [GitHub Handle]  
-**Twitter/X**: [Handle]
+**Project Lead**: Diego Miglioli  
+**Email**: migliolidiego@gmail.com  
+**GitHub**: diegomig  
+**Twitter/X**: @diegomiglioli
 
 ---
 

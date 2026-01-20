@@ -301,7 +301,7 @@ With this approach, the SDK will provide mathematically correct tick math calcul
 
 ---
 
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)  
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)  
 **Uniswap V3 Reference**: [https://github.com/Uniswap/v3-core](https://github.com/Uniswap/v3-core)  
 **License**: MIT OR Apache-2.0 (Open Source)  
 **Precision Requirement**: 100% match with Uniswap V3 reference implementation

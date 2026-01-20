@@ -172,4 +172,4 @@ Active grants are **fully organized and ready for submission**:
 
 **Last Updated**: January 2026  
 **Organization**: MIG Labs  
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)

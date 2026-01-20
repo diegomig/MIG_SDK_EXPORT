@@ -2,13 +2,13 @@
 
 **Grant Program**: Uniswap Foundation Infrastructure Grant  
 **Project**: MIG Topology SDK - Uniswap Ecosystem Optimization  
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)
 
 ---
 
 ## Repository Information
 
-- **GitHub Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)
+- **GitHub Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)
 - **License**: MIT OR Apache-2.0 (Open Source)
 - **Language**: Rust (backend), JavaScript (dashboard frontend)
 - **Platform**: Arbitrum One
@@ -190,7 +190,7 @@ cargo test twap
 
 ```bash
 # Clone repository
-git clone https://github.com/mig-labs/mig-topology-sdk.git
+git clone https://github.com/diegomig/MIG_SDK_EXPORT.git
 cd mig-topology-sdk
 
 # Set up environment
@@ -230,8 +230,8 @@ Users can choose either license for maximum compatibility.
 
 ## Contact & Support
 
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)  
-**Issues**: [GitHub Issues](https://github.com/mig-labs/mig-topology-sdk/issues)  
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)  
+**Issues**: [GitHub Issues](https://github.com/diegomig/MIG_SDK_EXPORT/issues)  
 **Focus**: Uniswap V2/V3/V4 on Arbitrum
 
 ---

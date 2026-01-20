@@ -197,5 +197,5 @@ cargo test --all-features
 ---
 
 **Organization**: MIG Labs  
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)  
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)  
 **Grant Tracking**: This file

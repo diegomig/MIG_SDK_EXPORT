@@ -280,6 +280,6 @@ With this plan, the SDK will be thoroughly validated for production deployment, 
 
 ---
 
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)  
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)  
 **Milestone**: Milestone 3 - Production Readiness  
 **Timeline**: 4-5 weeks (overlaps with Milestone 3 development)

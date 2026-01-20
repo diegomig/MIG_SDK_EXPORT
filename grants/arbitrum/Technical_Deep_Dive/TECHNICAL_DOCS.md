@@ -2,13 +2,13 @@
 
 **Grant Program**: Arbitrum Foundation Developer Tooling Grant  
 **Project**: MIG Topology SDK Production Optimization  
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)
 
 ---
 
 ## Repository Information
 
-- **GitHub Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)
+- **GitHub Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)
 - **License**: MIT OR Apache-2.0 (Open Source)
 - **Language**: Rust
 - **Platform**: Arbitrum One
@@ -215,7 +215,7 @@ cargo tarpaulin --out Html
 
 ```bash
 # Clone repository
-git clone https://github.com/mig-labs/mig-topology-sdk.git
+git clone https://github.com/diegomig/MIG_SDK_EXPORT.git
 cd mig-topology-sdk
 
 # Set up environment
@@ -256,9 +256,9 @@ Users can choose either license for maximum compatibility.
 
 ## Contact & Support
 
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)  
-**Issues**: [GitHub Issues](https://github.com/mig-labs/mig-topology-sdk/issues)  
-**Discussions**: [GitHub Discussions](https://github.com/mig-labs/mig-topology-sdk/discussions) (to be enabled)
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)  
+**Issues**: [GitHub Issues](https://github.com/diegomig/MIG_SDK_EXPORT/issues)  
+**Discussions**: [GitHub Discussions](https://github.com/diegomig/MIG_SDK_EXPORT/discussions) (to be enabled)
 
 ---
 

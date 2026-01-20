@@ -164,7 +164,10 @@ Payment released only upon:
 ## Contact Information
 
 **Organization**: MIG Labs  
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)  
+**Project Lead**: Diego Miglioli  
+**Email**: migliolidiego@gmail.com  
+**GitHub**: diegomig  
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)  
 **License**: MIT OR Apache-2.0 (Open Source)
 
 ---

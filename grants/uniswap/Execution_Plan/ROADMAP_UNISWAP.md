@@ -9,9 +9,13 @@
 
 ## Overview
 
-This roadmap focuses on **Uniswap-specific enhancements** that benefit the entire Uniswap ecosystem on Arbitrum. The work is organized into **3 milestones**, each with clear deliverables, success criteria, and payment triggers.
+This roadmap focuses on **Uniswap-specific enhancements** that benefit the entire Uniswap ecosystem on Arbitrum. The work is organized into **1 upfront payment + 3 milestones**, each with clear deliverables, success criteria, and payment triggers.
 
-**Payment Structure**: Payments are released upon milestone completion and verification (not fixed calendar dates). This milestone-based approach allows flexibility for iterative refinement and quality assurance.
+**Payment Structure**:
+- **Upfront Payment ($15,000 | 20%)**: Upon grant approval - covers setup, infrastructure, and initial advisory engagement
+- **Milestone Payments**: Released upon completion and verification (not fixed calendar dates)
+
+This structure ensures proper setup and external advisory engagement from day one, while maintaining accountability through milestone-based verification.
 
 ---
 
@@ -119,7 +123,7 @@ Payment released upon:
 
 ## Milestone 2: Uniswap Analytics Dashboard
 
-**Budget**: $30,000 USD (40% of total)  
+**Budget**: $25,000 USD (33% of total)  
 **Estimated Duration**: 6-8 weeks  
 **Priority**: P1 (Ecosystem Tooling)
 
@@ -323,6 +327,6 @@ This roadmap aligns with Uniswap Foundation's mission to:
 
 ---
 
-**Repository**: [https://github.com/mig-labs/mig-topology-sdk](https://github.com/mig-labs/mig-topology-sdk)  
+**Repository**: [https://github.com/diegomig/MIG_SDK_EXPORT](https://github.com/diegomig/MIG_SDK_EXPORT)  
 **License**: MIT OR Apache-2.0 (Open Source)  
 **Focus**: Uniswap V2/V3/V4 on Arbitrum

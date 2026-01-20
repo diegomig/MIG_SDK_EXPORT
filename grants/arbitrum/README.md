@@ -52,7 +52,7 @@ All technical documentation is available in the main repository:
 - Architecture: [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
 - Roadmap: [`docs/ROADMAP.md`](../../docs/ROADMAP.md)
 - Benchmarks: [`docs/BENCHMARKS.md`](../../docs/BENCHMARKS.md)
-- Repository: [GitHub Repository](https://github.com/mig-labs/mig-topology-sdk)
+- Repository: [GitHub Repository](https://github.com/diegomig/MIG_SDK_EXPORT)
 
 ---
 
