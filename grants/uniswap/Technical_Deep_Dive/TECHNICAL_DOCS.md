@@ -62,36 +62,44 @@
 
 ## Grant Deliverables Documentation
 
-### Milestone 1: Enhanced Uniswap V2/V3 Support
+### Milestone 1: Tick Math Foundation
 
 **New Documentation** (to be created):
-- `docs/UNISWAP_FEATURES.md`: Uniswap-specific features guide
 - `src/uniswap/tick_math.rs`: Advanced tick math library (rustdocs)
-- `src/uniswap/twap.rs`: TWAP integration (rustdocs)
-- `src/uniswap/fee_analysis.rs`: Fee tier analysis (rustdocs)
+- `src/uniswap/sqrt_price.rs`: SqrtPriceX96 calculations (rustdocs)
+- `src/uniswap/liquidity.rs`: Liquidity calculations (rustdocs)
+- `docs/uniswap/TICK_MATH_VALIDATION.md`: Mathematical validation report
+- Mathematical specification document
 
 **Enhanced Documentation**:
-- `docs/ARCHITECTURE.md`: Uniswap-specific architecture enhancements
-- Rustdocs: Complete API documentation for Uniswap modules
+- Rustdocs: Complete API documentation for math modules
 
-### Milestone 2: Uniswap Analytics Dashboard
+### Milestone 2: TWAP + Fee Analytics
 
 **New Documentation** (to be created):
-- `examples/uniswap_dashboard/README.md`: Dashboard setup guide
+- `src/uniswap/twap.rs`: TWAP integration (rustdocs)
+- `src/uniswap/fee_analysis.rs`: Fee tier analysis (rustdocs)
+- `docs/TWAP_INTEGRATION.md`: TWAP guide
+- `docs/FEE_TIER_ANALYSIS.md`: Fee analysis documentation
+
+### Milestone 3: Analytics Dashboard (Reference Implementation)
+
+**New Documentation** (to be created):
+- `examples/uniswap_dashboard/README.md`: Dashboard setup guide (<30min)
 - `examples/uniswap_dashboard/API.md`: API documentation
-- `docs/DASHBOARD_DEPLOYMENT.md`: Deployment guide
+- `docs/DASHBOARD_DEPLOYMENT.md`: Docker deployment guide
 
 **Dashboard Components**:
 - Backend: `examples/uniswap_dashboard/backend/`
 - Frontend: `examples/uniswap_dashboard/frontend/`
 
-### Milestone 3: Uniswap V4 Preparation
+### Milestone 4: V4 Preparation + Protocol Integrations
 
 **New Documentation** (to be created):
-- `docs/UNISWAP_V4.md`: Uniswap V4 preparation guide
+- `docs/UNISWAP_V4.md`: V4 migration guide
 - `docs/PROTOCOL_INTEGRATION.md`: Protocol integration tutorials
-- `src/uniswap/v4_hooks.rs`: V4 hooks support (rustdocs)
-- `src/uniswap/singleton.rs`: Singleton pool support (rustdocs)
+- `src/uniswap/singleton_indexer.rs`: Singleton Indexer (rustdocs)
+- `src/uniswap/hooks_discovery.rs`: Hooks Discovery framework (rustdocs)
 
 ---
 

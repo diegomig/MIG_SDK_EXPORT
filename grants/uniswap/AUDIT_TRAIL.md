@@ -2,7 +2,8 @@
 
 **Grant Program**: Uniswap Foundation Infrastructure Grant  
 **Amount**: $75,000 USD  
-**Timeline**: 4-6 months (milestone-based)  
+**Timeline**: 5-7 months (milestone-based)  
+**Payment Structure**: Upfront (13%) + 4 milestones  
 **Status**: Application submitted / Awaiting approval
 
 ---
@@ -13,85 +14,135 @@ This document tracks all development activity, PRs, commits, and artifacts relat
 
 ---
 
-## Milestone 1: Enhanced Uniswap V2/V3 Support
+## Upfront Payment: Setup & Infrastructure
 
-**Budget**: $30,000 ARB  
+**Budget**: $10,000 USD (13%)  
+**Status**: Pending approval  
+**Trigger**: Upon grant approval
+
+### Deliverables
+
+- [ ] External advisory engagement
+- [ ] Infrastructure setup (CI/CD, testing framework)
+- [ ] AI-first framework configuration
+- [ ] Workspace refactor (if needed)
+- [ ] Project management setup
+
+---
+
+## Milestone 1: Tick Math Foundation
+
+**Budget**: $20,000 USD (27%)  
 **Status**: Pending approval  
 **Target Completion**: 6-8 weeks after grant approval
 
 ### Branches
 
 - `grant/uniswap/m1-tick-math`
-- `grant/uniswap/m1-twap-integration`
-- `grant/uniswap/m1-fee-tier-analysis`
+- `grant/uniswap/m1-sqrt-price`
+- `grant/uniswap/m1-liquidity-calc`
 
 ### Pull Requests
 
 (To be filled after grant approval)
 
 - [ ] PR #XX: Advanced tick math library
+- [ ] PR #XX: SqrtPriceX96 calculations
+- [ ] PR #XX: Liquidity calculations
+- [ ] PR #XX: Mathematical specification
+
+### Git Tags
+
+- `uniswap-m1` (upon milestone completion)
+
+### Artifacts
+
+- [ ] Mathematical validation report: `docs/uniswap/TICK_MATH_VALIDATION.md`
+- [ ] Mathematical spec: `grants/uniswap/Technical_Deep_Dive/MATHEMATICAL_SPEC.md` (enhanced)
+- [ ] Property-based tests: `tests/uniswap/tick_math_properties.rs`
+
+### Verification
+
+**Success Criteria**:
+- Tick math accuracy: 100% match with Uniswap V3 reference (0 discrepancies)
+- Performance: <10ms per tick math calculation
+- Unit test coverage: ≥90% for tick math
+- External expert validation: 2+ positive reviews
+
+**Verification Commands**:
+```bash
+cargo test --features redis,observability uniswap::tick_math
+cargo run --example validate_tick_math
+```
+
+---
+
+## Milestone 2: TWAP + Fee Analytics
+
+**Budget**: $20,000 USD (27%)  
+**Status**: Pending M1 completion  
+**Target Completion**: 6-8 weeks after M1
+
+### Branches
+
+- `grant/uniswap/m2-twap-integration`
+- `grant/uniswap/m2-fee-tier-analysis`
+- `grant/uniswap/m2-liquidity-concentration`
+
+### Pull Requests
+
+(To be filled after M1 completion)
+
 - [ ] PR #XX: TWAP integration
 - [ ] PR #XX: Fee tier analysis tools
 - [ ] PR #XX: Liquidity concentration analysis
 
 ### Git Tags
 
-- `uniswap-m1` (upon milestone completion)
-
-### Key Commits
-
-(To be filled during development)
+- `uniswap-m2` (upon milestone completion)
 
 ### Artifacts
 
-- [ ] Mathematical validation report: `docs/uniswap/TICK_MATH_VALIDATION.md`
-- [ ] Uniswap features guide: `docs/UNISWAP_FEATURES.md`
-- [ ] Mathematical spec: `grants/uniswap/Technical_Deep_Dive/MATHEMATICAL_SPEC.md` (enhanced)
+- [ ] TWAP guide: `docs/TWAP_INTEGRATION.md`
+- [ ] Fee analysis documentation: `docs/FEE_TIER_ANALYSIS.md`
 
 ### Verification
 
 **Success Criteria**:
-- Tick math accuracy: 100% match with Uniswap V3 reference
-- TWAP integration: <100ms latency
-- Unit test coverage: ≥90% for tick math
+- TWAP query latency: <100ms
+- Fee tier recommendations validated by external experts
+- Zero critical bugs in production for 30 days
 
 **Verification Commands**:
 ```bash
-cargo test --features redis,observability uniswap::tick_math
 cargo test --features redis,observability uniswap::twap
-cargo run --example validate_tick_math
+cargo run --example twap_benchmark
 ```
 
 ---
 
-## Milestone 2: Uniswap Analytics Dashboard
+## Milestone 3: Analytics Dashboard - Reference Implementation
 
-**Budget**: $30,000 ARB  
-**Status**: Pending M1 completion  
-**Target Completion**: 6-8 weeks after M1
+**Budget**: $15,000 USD (20%)  
+**Status**: Pending M2 completion  
+**Target Completion**: 6-8 weeks after M2
 
 ### Branches
 
-- `grant/uniswap/m2-dashboard-backend`
-- `grant/uniswap/m2-dashboard-frontend`
-- `grant/uniswap/m2-pool-analytics`
+- `grant/uniswap/m3-dashboard-backend`
+- `grant/uniswap/m3-dashboard-frontend`
 
 ### Pull Requests
 
 (To be filled during development)
 
 - [ ] PR #XX: Dashboard backend (Rust API)
-- [ ] PR #XX: Dashboard frontend (React/Vue.js)
-- [ ] PR #XX: Pool analytics integration
-- [ ] PR #XX: Historical data visualization
+- [ ] PR #XX: Dashboard frontend (React)
+- [ ] PR #XX: Public deployment
 
 ### Git Tags
 
-- `uniswap-m2` (upon milestone completion)
-
-### Key Commits
-
-(To be filled during development)
+- `uniswap-m3` (upon milestone completion)
 
 ### Artifacts
 
@@ -103,8 +154,8 @@ cargo run --example validate_tick_math
 
 **Success Criteria**:
 - Real-time updates: <1s latency
-- Dashboard: Production-ready, user-friendly
-- Complete pool analytics
+- 100% of Uniswap V2/V3 pools on Arbitrum indexed
+- Setup time <30 minutes (validated by 3+ testers)
 
 **Verification Commands**:
 ```bash
@@ -115,49 +166,49 @@ cargo run --features redis,observability
 
 ---
 
-## Milestone 3: Uniswap V4 Preparation & Protocol Integrations
+## Milestone 4: V4 Preparation + Protocol Integrations
 
-**Budget**: $15,000 ARB  
-**Status**: Pending M2 completion  
-**Target Completion**: 4-6 weeks after M2
+**Budget**: $10,000 USD (13%)  
+**Status**: Pending M3 completion  
+**Target Completion**: 4-6 weeks after M3
 
 ### Branches
 
-- `grant/uniswap/m3-v4-hooks`
-- `grant/uniswap/m3-v4-singleton`
-- `grant/uniswap/m3-protocol-examples`
-- `track/unichain/m3-readiness` (if separate from main Uniswap work)
+- `grant/uniswap/m4-singleton-indexer`
+- `grant/uniswap/m4-hooks-discovery`
+- `grant/uniswap/m4-protocol-examples`
 
 ### Pull Requests
 
 (To be filled during development)
 
-- [ ] PR #XX: V4 hooks architecture support
-- [ ] PR #XX: V4 singleton pool support
+- [ ] PR #XX: Singleton Indexer
+- [ ] PR #XX: Hooks Discovery framework
 - [ ] PR #XX: Protocol integration examples (3 examples)
-- [ ] PR #XX: Unichain readiness (network configuration, deployment)
 
 ### Git Tags
 
-- `uniswap-m3` (upon milestone completion)
-- `unichain-ready` (if Unichain deployment complete)
-
-### Key Commits
-
-(To be filled during development)
+- `uniswap-m4` (upon milestone completion)
+- `uniswap-complete` (upon full grant completion)
 
 ### Artifacts
 
 - [ ] V4 preparation guide: `docs/UNISWAP_V4.md`
+- [ ] Singleton Indexer: `src/uniswap/singleton_indexer.rs`
+- [ ] Hooks Discovery: `src/uniswap/hooks_discovery.rs`
 - [ ] Protocol examples: 3 working examples with documentation
-- [ ] Unichain deployment: Configuration and validation (if applicable)
 
 ### Verification
 
 **Success Criteria**:
-- V4 preparation: Hooks and singleton support ready
-- Protocol examples: 3+ working examples
-- V4 readiness: Ready for Uniswap V4 launch
+- Singleton Indexer validated by external V4 experts
+- Hooks discovery functional on V4 testnet (or spec-compliant)
+- 3 working integration examples with complete docs
+- Zero critical bugs in production for 30 days
+
+**V4 Contingency**:
+- If V4 mainnet launches: Full V4 integration validated on mainnet
+- If V4 delayed: V4 preparation validated by external experts on testnet/specs
 
 **Verification Commands**:
 ```bash
@@ -171,18 +222,18 @@ cargo test --features redis,observability uniswap::v4
 
 ## Grant Completion Summary
 
-**Total Milestones**: 3  
+**Total Payments**: Upfront + 4 Milestones  
 **Total PRs**: (To be tracked)  
 **Total Commits**: (To be tracked)  
 **Final Tag**: `uniswap-complete`
 
 ### Final Deliverables Checklist
 
-- [ ] All milestone success criteria met
-- [ ] All code merged to `main` branch
-- [ ] Mathematical validation complete (100% accuracy)
-- [ ] Dashboard deployed and accessible
-- [ ] V4 preparation complete
+- [ ] Upfront: Setup and infrastructure complete
+- [ ] Milestone 1: Tick math 100% accurate vs V3 reference
+- [ ] Milestone 2: TWAP + Fee Analytics complete
+- [ ] Milestone 3: Dashboard deployed and accessible
+- [ ] Milestone 4: V4 preparation complete + 3 integration examples
 - [ ] All documentation published
 
 ---

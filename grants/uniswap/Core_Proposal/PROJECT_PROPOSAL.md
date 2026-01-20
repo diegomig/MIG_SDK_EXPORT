@@ -146,23 +146,27 @@ This ensures production-grade quality through:
 
 ## 5. Deliverables
 
-### Milestone 1: Enhanced Uniswap V2/V3 Support (6-8 weeks)
-- Advanced tick math library (tick-to-price, sqrtPriceX96)
-- TWAP integration (Uniswap V3 TWAP oracles)
-- Fee tier analysis and optimization
-- Liquidity concentration analysis tools
+### Milestone 1: Tick Math Foundation (6-8 weeks)
+- Advanced tick math library (tick-to-price, SqrtPriceX96, liquidity calculations)
+- Mathematical validation against Uniswap V3 Solidity reference
+- Property-based testing for overflow/precision edge cases
+- Complete mathematical specification and rustdocs
 
-### Milestone 2: Uniswap Analytics Dashboard (6-8 weeks)
+### Milestone 2: TWAP + Fee Analytics (6-8 weeks)
+- TWAP oracle integration (<100ms query latency)
+- Fee tier analysis tools (optimization recommendations)
+- Liquidity concentration analysis (tick range metrics)
+
+### Milestone 3: Analytics Dashboard - Reference Implementation (6-8 weeks)
 - Real-time topology visualization (Uniswap pools)
-- Pool analytics (liquidity, volume, fees)
-- Fee tier analysis and recommendations
-- Historical data visualization
+- Pool analytics (TVL, volume, fees)
+- Public deployment as reference implementation
 
-### Milestone 3: Uniswap V4 Preparation & Protocol Integrations (4-6 weeks)
-- Uniswap V4 hooks architecture support (preparation)
-- Singleton pool architecture support
-- Protocol integration examples (lending, analytics, research)
-- Documentation and tutorials
+### Milestone 4: V4 Preparation + Protocol Integrations (4-6 weeks)
+- Singleton Indexer (PoolId to readable data translation)
+- Hooks Discovery framework
+- 3 protocol integration examples (lending, analytics, research)
+- V4 migration guide
 
 ### Final Deliverable
 - **Enhanced SDK Release**: Uniswap-optimized SDK with advanced features
@@ -190,11 +194,13 @@ This ensures production-grade quality through:
 
 ## 7. Timeline
 
-**Total Duration**: 4-6 months (milestone-based delivery)
+**Total Duration**: 5-7 months (milestone-based delivery)
 
-- **Milestone 1**: 6-8 weeks
-- **Milestone 2**: 6-8 weeks
-- **Milestone 3**: 4-6 weeks
+- **Upfront**: Day 0 (upon approval)
+- **Milestone 1**: 6-8 weeks (Tick Math Foundation)
+- **Milestone 2**: 6-8 weeks (TWAP + Fee Analytics)
+- **Milestone 3**: 6-8 weeks (Analytics Dashboard)
+- **Milestone 4**: 4-6 weeks (V4 Preparation)
 
 **Note**: Timeline is milestone-based (not fixed calendar dates). Payments are released upon milestone completion and verification.
 
@@ -204,11 +210,13 @@ This ensures production-grade quality through:
 
 **Total Requested**: $75,000 USD
 
-- **Milestone 1**: $30,000 (40%)
-- **Milestone 2**: $30,000 (40%)
+- **Upfront**: $10,000 (13%)
+- **Milestone 1**: $20,000 (27%)
+- **Milestone 2**: $20,000 (27%)
 - **Milestone 3**: $15,000 (20%)
+- **Milestone 4**: $10,000 (13%)
 
-See [BUDGET.md](./BUDGET.md) for detailed itemized breakdown.
+See [BUDGET.md](../Execution_Plan/BUDGET.md) for detailed itemized breakdown.
 
 ---
 

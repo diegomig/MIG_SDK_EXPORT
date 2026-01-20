@@ -51,7 +51,7 @@ Rather than splitting infrastructure and protocol features across multiple grant
 
 ## Funding Breakdown
 
-### Upfront Payment: Setup & Infrastructure ($15,000 USD | Day 0)
+### Upfront Payment: Setup & Infrastructure ($10,000 USD | 13% | Day 0)
 
 **Trigger:** Upon grant approval
 
@@ -63,90 +63,132 @@ Rather than splitting infrastructure and protocol features across multiple grant
 - Project management and reporting infrastructure
 
 **Budget:**
-- External Advisory (Initial Engagement): $6,000
-- Infrastructure Setup: $3,000
-- AI-First Framework Setup: $2,000
-- Workspace Refactor: $3,000
-- Project Management: $1,000
+- External Advisory (Initial Engagement): $4,000
+- Infrastructure Setup: $2,500
+- AI-First Framework Setup: $1,500
+- Workspace Refactor: $1,500
+- Project Management: $500
 
 ---
 
-### Milestone 1: Enhanced Uniswap V2/V3 Support ($25,000 USD | 6-8 weeks)
+### Milestone 1: Tick Math Foundation ($20,000 USD | 27% | 6-8 weeks)
+
+**Focus:** Core mathematical precision - the most critical component
 
 **Deliverables:**
-- Advanced tick math library (100% accuracy vs. Uniswap V3 reference)
+- Advanced tick math library (tick-to-price, SqrtPriceX96, liquidity calculations)
+- Mathematical validation against Uniswap V3 Solidity reference
+- Property-based testing for overflow/precision edge cases
+- Complete mathematical specification and rustdocs
+
+**Budget:**
+- Tick Math Development: $10,000
+- External Advisory (Math Validation): $4,000
+- Mathematical Validation & Testing: $3,500
+- Documentation (Math Spec): $2,500
+
+**Note:** Using proven libraries (`alloy-primitives`) where appropriate.
+
+---
+
+### Milestone 2: TWAP + Fee Analytics ($20,000 USD | 27% | 6-8 weeks)
+
+**Focus:** Oracle integration and fee optimization tools
+
+**Deliverables:**
 - TWAP oracle integration (<100ms query latency)
-- Fee tier analysis tools
-- Liquidity concentration analysis
-- RPC optimization (needed for TWAP performance)
-- Basic caching layer (needed for analytics)
+- Fee tier analysis tools (optimization recommendations)
+- Liquidity concentration analysis (tick range metrics)
 
 **Budget:**
-- Development Time: $14,000
-- External Advisory (Uniswap Expertise): $5,000
-- Mathematical Validation: $3,000
-- Documentation: $3,000
+- TWAP Integration: $8,000
+- Fee Tier Analysis: $5,000
+- Liquidity Concentration Analysis: $4,000
+- External Advisory: $2,000
+- Documentation: $1,000
 
-### Milestone 2: Uniswap Analytics Dashboard ($25,000 USD | 6-8 weeks)
+---
+
+### Milestone 3: Analytics Dashboard - Reference Implementation ($15,000 USD | 20% | 6-8 weeks)
+
+**Focus:** Demonstrate SDK capabilities with real-time massive data processing
 
 **Deliverables:**
-- Real-time analytics dashboard (Rust backend + JavaScript frontend)
+- Real-time analytics dashboard (Rust backend + React frontend)
 - Topology visualization (interactive pool graph)
-- Pool analytics (TVL, volume, fees, concentration metrics)
-- Historical data visualization
-- Enhanced caching and observability
+- Pool analytics (TVL, volume, fees)
+- Public deployment as reference implementation
 
 **Budget:**
-- Backend Development: $12,000
-- Frontend Development: $10,000
-- External Advisory: $4,000
-- Documentation & Deployment: $2,000
-- Infrastructure (hosting): $2,000
+- Backend Development: $6,000
+- Frontend Development: $5,000
+- External Advisory: $2,000
+- Documentation & Deployment: $1,500
+- Infrastructure (hosting): $500
 
-### Milestone 3: Uniswap V4 Preparation & Protocol Integrations ($15,000 USD | 4-6 weeks)
+**Note:** Positioned as **Reference Implementation**, not standalone product.
+
+---
+
+### Milestone 4: V4 Preparation + Protocol Integrations ($10,000 USD | 13% | 4-6 weeks)
+
+**Focus:** Future-proofing for V4 + demonstrating SDK value
 
 **Deliverables:**
-- Uniswap V4 hooks architecture support
-- Singleton pool architecture support
+- Singleton Indexer (PoolId to readable data translation)
+- Hooks Discovery framework
 - 3 protocol integration examples (lending, analytics, research)
-- V4 preparation guide and migration documentation
+- V4 migration guide
 
 **Budget:**
-- V4 Development: $4,500
-- Protocol Integration Examples: $3,500
+- V4 Singleton Indexer: $3,000
+- V4 Hooks Discovery: $2,000
+- Protocol Integration Examples: $3,000
 - External Advisory (V4 Expertise): $1,500
 - Documentation: $500
+
+**V4 Contingency:** Deliverables achievable regardless of V4 mainnet launch timing.
+
+---
 
 **Total: $75,000 USD**
 
 **Payment Schedule:**
 | Payment | Amount | Percentage | Trigger |
 |---------|--------|------------|---------|
-| Upfront | $15,000 | 20% | Grant approval |
-| Milestone 1 | $25,000 | 33% | M1 completion + verification |
-| Milestone 2 | $25,000 | 33% | M2 completion + verification |
-| Milestone 3 | $10,000 | 14% | M3 completion + verification |
+| Upfront | $10,000 | 13% | Grant approval |
+| Milestone 1 | $20,000 | 27% | Tick Math validated (100% accuracy) |
+| Milestone 2 | $20,000 | 27% | TWAP + Fee Analytics complete |
+| Milestone 3 | $15,000 | 20% | Dashboard deployed publicly |
+| Milestone 4 | $10,000 | 13% | V4 prep + 3 integration examples |
 
 ---
 
 ## Success Criteria & KPIs
 
-### Milestone 1 KPIs
-- 📊 100% mathematical validation (0 discrepancies)
-- 📊 Performance: <100ms TWAP queries, <10ms tick math
-- 📊 100% public API documentation coverage
+### Milestone 1 KPIs (Tick Math)
+- 📊 100% accuracy vs Uniswap V3 reference (0 discrepancies)
+- 📊 Performance: <10ms per tick math calculation
+- 📊 100% rustdocs coverage for math modules
 - 📊 Positive validation from 2+ external Uniswap protocol experts
 
-### Milestone 2 KPIs
-- 📊 <1s real-time updates, 60fps smooth visualization
-- 📊 100% of Uniswap V2/V3 pools on Arbitrum indexed
-- 📊 20+ unique visitors within 30 days of launch
-- 📊 Setup time <30 minutes (validated by 3+ testers)
+### Milestone 2 KPIs (TWAP + Fee Analytics)
+- 📊 <100ms TWAP query latency
+- 📊 Fee tier recommendations validated by external experts
+- 📊 Liquidity concentration metrics for all V3 pools on Arbitrum
+- 📊 Zero critical bugs in production for 30 days
 
-### Milestone 3 KPIs
-- 📊 Hooks + Singleton validated by 3+ external reviewers
+### Milestone 3 KPIs (Dashboard)
+- 📊 <1s real-time updates
+- 📊 100% of Uniswap V2/V3 pools on Arbitrum indexed
+- 📊 Setup time <30 minutes (validated by 3+ testers)
+- 📊 Complete API documentation
+
+### Milestone 4 KPIs (V4 + Integrations)
+- 📊 Singleton Indexer validated by external V4 experts
+- 📊 Hooks discovery functional on V4 testnet (or spec-compliant)
 - 📊 3 working integration examples with complete docs
-- 📊 5+ GitHub stars, 2+ integration inquiries
+- 📊 Zero critical bugs in production for 30 days
 - 📊 50+ views on integration guide within 30 days
 
 ---

@@ -129,33 +129,41 @@ This reporting plan outlines how we will communicate progress, track KPIs, and e
 
 ## Key Performance Indicators (KPIs) Tracking
 
-### Milestone 1: Enhanced Uniswap V2/V3 Support
+### Milestone 1: Tick Math Foundation
 
 | KPI | Target | Measurement Method | Reporting Frequency |
 |-----|--------|-------------------|---------------------|
 | Mathematical Validation | 100% accuracy vs Uniswap V3 reference (0 discrepancies) | Automated test suite + external review | Milestone completion |
-| Performance: TWAP queries | <100ms latency | Benchmark report | Milestone completion |
 | Performance: Tick math | <10ms per calculation | Benchmark report | Milestone completion |
-| Documentation Coverage | 100% public API coverage in rustdocs | cargo doc --no-deps check | Milestone completion |
+| Documentation Coverage | 100% rustdocs coverage for math modules | cargo doc --no-deps check | Milestone completion |
 | External Review | Positive validation from 2+ Uniswap protocol experts | External advisory reports | Milestone completion |
 
-### Milestone 2: Uniswap Analytics Dashboard
+### Milestone 2: TWAP + Fee Analytics
 
 | KPI | Target | Measurement Method | Reporting Frequency |
 |-----|--------|-------------------|---------------------|
-| Dashboard Performance | <1s real-time updates, 60fps visualization | Performance monitoring tools | Milestone completion |
+| Performance: TWAP queries | <100ms latency | Benchmark report | Milestone completion |
+| Fee Tier Recommendations | Validated by external experts | External advisory reports | Milestone completion |
+| Liquidity Concentration | Metrics for all V3 pools on Arbitrum | Dashboard/CLI output | Milestone completion |
+| Code Quality | Zero critical bugs in production for 30 days | Bug tracker | Milestone completion + 30 days |
+
+### Milestone 3: Analytics Dashboard (Reference Implementation)
+
+| KPI | Target | Measurement Method | Reporting Frequency |
+|-----|--------|-------------------|---------------------|
+| Dashboard Performance | <1s real-time updates | Performance monitoring tools | Milestone completion |
 | Analytics Coverage | 100% of Uniswap V2/V3 pools on Arbitrum | Dashboard metrics | Milestone completion |
-| User Adoption | 20+ unique visitors within 30 days | Google Analytics or similar | Milestone completion + 30 days |
 | Documentation Quality | Setup time <30 minutes | User testing with 3+ external testers | Milestone completion |
+| API Documentation | Complete REST API docs | Documentation review | Milestone completion |
 
-### Milestone 3: V4 Preparation & Protocol Integrations
+### Milestone 4: V4 Preparation + Protocol Integrations
 
 | KPI | Target | Measurement Method | Reporting Frequency |
 |-----|--------|-------------------|---------------------|
-| V4 Readiness | Hooks + Singleton validated by 3+ reviewers | External advisory reports | Milestone completion |
+| Singleton Indexer | Validated by external V4 experts | External advisory reports | Milestone completion |
+| Hooks Discovery | Functional on V4 testnet (or spec-compliant) | Test suite | Milestone completion |
 | Integration Examples | 3 working examples with complete docs | GitHub repo + documentation | Milestone completion |
-| Ecosystem Validation | 5+ GitHub stars, 2+ integration inquiries | GitHub metrics + emails/issues | Milestone completion + 30 days |
-| Developer Adoption | 50+ views on integration guide within 30 days | Documentation analytics | Milestone completion + 30 days |
+| Code Quality | Zero critical bugs in production for 30 days | Bug tracker | Milestone completion + 30 days |
 
 ---
 
@@ -319,7 +327,7 @@ This reporting plan outlines how we will communicate progress, track KPIs, and e
 ## Post-Grant Reporting
 
 ### Final Report (upon grant completion)
-- Comprehensive summary of all 3 milestones
+- Comprehensive summary of all 4 milestones
 - Overall KPI performance vs. targets
 - Total budget spent vs. allocated
 - Ecosystem impact summary (GitHub stats, integrations, adoption)

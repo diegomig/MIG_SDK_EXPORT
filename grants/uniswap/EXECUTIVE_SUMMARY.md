@@ -3,8 +3,9 @@
 **Grant Program**: Uniswap Foundation Infrastructure Grant  
 **Organization**: MIG Labs  
 **Requested Amount**: $75,000 USD  
-**Timeline**: 4-6 months (milestone-based delivery)  
-**Application Date**: January 2026
+**Timeline**: 5-7 months (milestone-based delivery)  
+**Application Date**: January 2026  
+**Payment Structure**: Upfront (13%) + 4 milestones
 
 ---
 
@@ -41,7 +42,7 @@ The **MIG Topology SDK** is a production-grade Rust library for real-time liquid
 
 ## Grant Scope & Deliverables
 
-### Upfront Payment: Setup & Infrastructure ($15,000 USD | Day 0)
+### Upfront Payment: Setup & Infrastructure ($10,000 USD | 13% | Day 0)
 
 **Trigger:** Upon grant approval
 
@@ -54,49 +55,85 @@ The **MIG Topology SDK** is a production-grade Rust library for real-time liquid
 
 ---
 
-### Milestone 1: Enhanced Uniswap V2/V3 Support ($25,000 USD | 6-8 weeks)
+### Milestone 1: Tick Math Foundation ($20,000 USD | 27% | 6-8 weeks)
+
+**Focus:** Core mathematical precision - the most critical component
 
 **Deliverables:**
-- Advanced tick math library (100% accuracy vs. Uniswap V3 reference)
-- TWAP oracle integration (<100ms query latency)
-- Fee tier analysis tools
-- Liquidity concentration analysis
-- Complete rustdocs and mathematical correctness documentation
+- Advanced tick math library (tick-to-price, SqrtPriceX96, liquidity calculations)
+- Mathematical validation against Uniswap V3 Solidity reference
+- Property-based testing for overflow/precision edge cases
+- Complete mathematical specification and rustdocs
 
 **KPIs:**
-- 📊 100% mathematical validation (0 discrepancies)
-- 📊 Performance: <100ms TWAP queries, <10ms tick math
-- 📊 100% public API documentation coverage
+- 📊 100% accuracy vs Uniswap V3 reference (0 discrepancies)
+- 📊 Performance: <10ms per tick math calculation
+- 📊 100% rustdocs coverage for math modules
 - 📊 Positive validation from 2+ external Uniswap protocol experts
 
-### Milestone 2: Uniswap Analytics Dashboard ($25,000 USD | 6-8 weeks)
+**Note:** Using proven libraries (like `alloy-primitives`) where appropriate to handle Rust/Solidity overflow differences.
+
+---
+
+### Milestone 2: TWAP + Fee Analytics ($20,000 USD | 27% | 6-8 weeks)
+
+**Focus:** Oracle integration and fee optimization tools
 
 **Deliverables:**
-- Real-time analytics dashboard (Rust backend + JavaScript frontend)
+- TWAP oracle integration (Uniswap V3 oracles)
+- Fee tier analysis tools (optimization recommendations, multi-fee tier discovery)
+- Liquidity concentration analysis (tick range analysis, distribution metrics)
+- Performance optimization for oracle queries
+
+**KPIs:**
+- 📊 <100ms TWAP query latency
+- 📊 Fee tier recommendations validated by external experts
+- 📊 Liquidity concentration metrics for all V3 pools on Arbitrum
+- 📊 Zero critical bugs in production for 30 days
+
+---
+
+### Milestone 3: Analytics Dashboard - Reference Implementation ($15,000 USD | 20% | 6-8 weeks)
+
+**Focus:** Demonstrate SDK capabilities with real-time massive data processing
+
+**Deliverables:**
+- Real-time analytics dashboard (Rust backend + React frontend)
 - Topology visualization (interactive pool graph)
 - Pool analytics (TVL, volume, fees, concentration metrics)
-- Historical data visualization
-- Complete setup and deployment documentation
+- Public deployment as reference implementation
 
 **KPIs:**
-- 📊 <1s real-time updates, 60fps smooth visualization
+- 📊 <1s real-time updates, smooth visualization
 - 📊 100% of Uniswap V2/V3 pools on Arbitrum indexed
-- 📊 20+ unique visitors within 30 days of launch
 - 📊 Setup time <30 minutes (validated by 3+ testers)
+- 📊 Complete API documentation
 
-### Milestone 3: Uniswap V4 Preparation & Protocol Integrations ($15,000 USD | 4-6 weeks)
+**Note:** Positioned as **Reference Implementation** to demonstrate SDK capabilities, not as standalone product.
+
+---
+
+### Milestone 4: V4 Preparation + Protocol Integrations ($10,000 USD | 13% | 4-6 weeks)
+
+**Focus:** Future-proofing for V4 + demonstrating SDK value
 
 **Deliverables:**
-- Uniswap V4 hooks architecture support
-- Singleton pool architecture support
+- **Singleton Indexer**: Translates V4's `PoolId` to human-readable data (critical for V4 adoption)
+- **Hooks Discovery**: Framework for identifying and validating hooks on V4 pools
 - 3 protocol integration examples (lending, analytics, research)
-- V4 preparation guide and migration documentation
+- V4 migration guide and integration tutorials
 
 **KPIs:**
-- 📊 Hooks + Singleton validated by 3+ external reviewers
-- 📊 3 working integration examples with complete docs
-- 📊 5+ GitHub stars, 2+ integration inquiries
-- 📊 50+ views on integration guide within 30 days
+- 📊 Singleton Indexer validated by external V4 experts
+- 📊 Hooks discovery framework functional on V4 testnet (or spec-compliant if testnet unavailable)
+- 📊 3 working integration examples with complete documentation
+- 📊 Code quality: Zero critical bugs in production for 30 days
+
+**V4 Launch Contingency:**
+- **If V4 mainnet launches during grant**: Full V4 integration validated on mainnet
+- **If V4 delayed**: V4 preparation validated by external experts on testnet/specs + protocol examples complete
+
+This contingency ensures deliverables are achievable regardless of V4 launch timing.
 
 ---
 
@@ -114,10 +151,11 @@ The **MIG Topology SDK** is a production-grade Rust library for real-time liquid
 | **Total** | **$75,000** | **100%** |
 
 **Payment Structure**: 
-- Upfront: $15,000 (20%) - Upon grant approval
-- Milestone 1: $25,000 (33%) - After completion + verification
-- Milestone 2: $25,000 (33%) - After completion + verification  
-- Milestone 3: $10,000 (14%) - After completion + verification
+- Upfront: $10,000 (13%) - Upon grant approval
+- Milestone 1: $20,000 (27%) - Tick Math validated (100% accuracy)
+- Milestone 2: $20,000 (27%) - TWAP + Fee Analytics complete
+- Milestone 3: $15,000 (20%) - Dashboard deployed publicly
+- Milestone 4: $10,000 (13%) - V4 prep + 3 integration examples
 
 ---
 
@@ -133,10 +171,10 @@ The **MIG Topology SDK** is a production-grade Rust library for real-time liquid
 - AI handles implementation details and boilerplate (reducing costs by ~30%)
 - Multi-model validation for mathematical correctness
 
-**External Advisory**: Uniswap protocol experts (budgeted at $12.5k)
-- Tick math validation
+**External Advisory**: Uniswap protocol experts (budgeted at $13.5k across all milestones)
+- Tick math validation (critical - Rust/Solidity precision differences)
 - TWAP integration review
-- V4 architecture validation
+- V4 architecture validation (Singleton Indexer, Hooks Discovery)
 - Production readiness audit
 
 ---
@@ -240,8 +278,8 @@ The **MIG Topology SDK** is a production-grade Rust library for real-time liquid
 ---
 
 **Total Request**: $75,000 USD  
-**Timeline**: 4-6 months  
-**Payment Structure**: 3 milestones ($30k / $30k / $15k)  
+**Timeline**: 5-7 months  
+**Payment Structure**: Upfront $10k (13%) + 4 milestones ($20k / $20k / $15k / $10k)  
 **Ready to Start**: Immediately upon grant approval
 
 ---

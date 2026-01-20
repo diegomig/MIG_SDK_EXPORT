@@ -46,24 +46,26 @@ With grant funding, we transition to **external advisory validation** with **Uni
 
 #### External Advisory Scope
 
-**Budget Allocation**: $12,500 (17% of total grant budget)
+**Budget Allocation**: $13,500 (18% of total grant budget)
 
 **Engagement Points**:
 
-1. **Milestone 1 Review** ($6,000)
-   - Uniswap protocol expert review
-   - Tick math validation (mathematical correctness)
-   - TWAP integration review (oracle best practices)
+1. **Upfront + Milestone 1** ($8,000)
+   - Initial architecture review and scope validation
+   - Tick math validation (mathematical correctness - critical)
+   - Property-based testing review
 
-2. **Milestone 2 Review** ($4,000)
+2. **Milestone 2** ($2,000)
+   - TWAP integration review (oracle best practices)
+   - Fee analysis validation
+
+3. **Milestone 3** ($2,000)
    - Dashboard architecture review
    - Performance optimization
-   - UX review
 
-3. **Milestone 3 Review** ($2,500)
-   - V4 architecture validation
-   - Hooks pattern review
-   - Singleton pattern review
+4. **Milestone 4** ($1,500)
+   - V4 Singleton Indexer validation
+   - Hooks Discovery framework review
 
 **Consultant Qualifications**:
 - Senior Rust/JavaScript developers with Uniswap protocol expertise

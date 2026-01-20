@@ -101,8 +101,8 @@ Each grant is organized into **4 main folders**:
 | **Grant Program** | Uniswap Foundation Infrastructure Grant |
 | **Amount** | $75,000 USD |
 | **Focus** | Uniswap-specific features + necessary infrastructure |
-| **Timeline** | 4-6 months (milestone-based) |
-| **Milestones** | Upfront $15k (20%) + 3 milestones (M1: $25k, M2: $25k, M3: $10k) |
+| **Timeline** | 5-7 months (milestone-based) |
+| **Milestones** | Upfront $10k (13%) + 4 milestones (M1: $20k, M2: $20k, M3: $15k, M4: $10k) |
 | **Portal** | [Uniswap Foundation Grantee Toolkit](https://www.uniswapfoundation.org/grantee-toolkit) |
 
 ---
