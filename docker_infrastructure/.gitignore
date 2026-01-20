@@ -1,0 +1,12 @@
+# Archivos de entorno (no commitear credenciales)
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# Archivos temporales
+*.tmp
+*.bak
+*.swp

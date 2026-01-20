@@ -1,0 +1,51 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# Environment files (secrets)
+.env
+.env.*
+!.env.example
+
+# IDE/editor folders
+.vscode/
+.idea/
+.history/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and temp
+*.log
+*.tmp
+*.temp
+*.cache
+
+# Flight Recorder / benchmark raw outputs (keep .md reports)
+*.jsonl
+benchmarks/*.jsonl
+logs/*.jsonl
+
+# Database dumps/backups
+*.sql
+*.dump
+*.sqlite
+*.db
+
+# Docs build output
+docs/_build/
+target/doc/
+
+# Python cache (if any)
+__pycache__/
+*.py[cod]
+
+# Node (if any)
+node_modules/
+
+# Backup files (old grant materials)
+grants_base_2025_backup.zip
+*_backup.zip
+

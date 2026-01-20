@@ -1,0 +1,579 @@
+# ===================================================================
+# Configuration for the MIG Topology SDK
+# ===================================================================
+
+# -------------------------------------------------------------------
+# Chain Configuration
+# -------------------------------------------------------------------
+[chain]
+chain_id = 42161 # Arbitrum One
+
+# -------------------------------------------------------------------
+# RPC Configuration
+# It is strongly recommended to use private RPC endpoints for production.
+# Public endpoints may be rate-limited or unreliable.
+# P0.3: Light node localhost support for ultra-low latency
+# -------------------------------------------------------------------
+[rpc]
+# URLs are loaded from SDK_RPC_HTTP_URLS environment variable in .env
+# Configure RPC providers for blockchain queries
+http_urls = []
+ws_urls = []
+provider_backoff_base_ms = 50
+provider_backoff_max_ms = 2000
+max_concurrent_per_provider = 2  # ✅ FIX: Reduced from 16 to 2 to prevent concurrent request issues (EOF errors)
+
+# P0.3: Light node localhost configuration
+[rpc.light_node]
+# Enable localhost light node (reduces RPC latency from ~100ms to <5ms)
+enabled = false  # Set to true to use localhost:8545 as primary RPC
+url = "http://127.0.0.1:8545"
+# Health check interval for light node (seconds)
+# 🚀 RPC OPTIMIZATION: Increased from 30s to 60s to reduce RPC calls
+health_check_interval_seconds = 60
+# Pre-warm connections on startup
+pre_warm_connections = true
+pre_warm_count = 20  # Number of connections to pre-warm
+
+[rpc.health_check]
+interval_seconds = 60 # Check RPC health every 60 seconds
+
+[rpc.circuit_breaker]
+failure_threshold = 8
+cooldown_seconds = 60
+
+# ✅ FASE 1.1: WebSocket configuration for block number updates
+[rpc.websocket]
+enabled = true # Enable WebSocket subscription for real-time block updates
+# URL will be derived from ws_urls[0] if available, or converted from http_urls[0]
+fallback_polling_interval_seconds = 1 # Polling interval if WebSocket fails
+
+[rpc.websocket.circuit_breaker]
+failure_threshold = 5 # Number of failures before circuit opens
+cooldown_seconds = 60 # Cooldown period before retry
+
+#[[rpc.providers]]
+#url = "https:// dedicated-state.rpc.example"
+#roles = ["state", "discovery"]
+#max_concurrency = 16
+#qps_limit = 40
+#multicall_batch_size = 180
+#multicall_timeout_seconds = 25
+#multicall_max_retries = 3
+
+# -------------------------------------------------------------------
+# Contract Addresses
+# -------------------------------------------------------------------
+[contracts]
+# Legacy field (not used in SDK - kept for compatibility)
+multi_arbitrage_address = "0x0000000000000000000000000000000000000000"
+
+[contracts.factories]
+multicall = "0xcA11bde05977b3631167028862bE2a173976CA11"
+sushiswap_v2 = "0xc35DADB65012eC5796536bD9864eD8773aBc74C4"
+camelot_v2 = "0x6EcCab422D763aC031210895C81787E87B43A652"
+camelot_v3 = "0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B"
+pancakeswap_v2 = "0x02a84c1b3BBD7401a5f7fa98a384EBC70bB5749E"
+kyberswap_elastic = "0xC7a590291e07B9fe9E64b86c58fD8fC764308C4A"
+traderjoe_v2 = "0xb43120c4745967fa9b93E79C149E66B0f2D6Fe0c"
+uniswap_v2 = "0xf1D7CC64Fb4452F05c498126312eBE29f30Fbcf9"
+uniswap_v3 = "0x1F98431c8aD98523631AE4a59f267346ea31F984"
+balancer_vault = "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
+curve_address_provider = "0x0000000022d53366457f9d5e68ec105046fc4383"
+
+# -------------------------------------------------------------------
+# Pool Validator Configuration
+# -------------------------------------------------------------------
+[validator]
+# Tokens used as anchors for price validation and routing.
+anchor_tokens = [
+    "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", # WETH
+    "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", # USDC (native)
+    "0xFF970A61A04b1Ca14834A43f5de4533eBDDB5CC8", # USDC.e (bridged)
+    "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", # USDT
+    # 🚀 RPC OPTIMIZATION: Expandir anchor tokens para mejor fallback de precios
+    "0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f", # WBTC
+    "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1", # DAI
+]
+
+# Tokens to explicitly ignore during discovery and routing.
+blacklisted_tokens = [
+    # "0xbadbadbadbadbadbadbadbadbadbadbadbadbadbad01"
+]
+
+# List of trusted factory addresses. Pools from these factories bypass bytecode checks.
+whitelisted_factories = [
+    "0xf1D7CC64Fb4452F05c498126312eBE29f30Fbcf9", # UniswapV2
+    "0x1F98431c8aD98523631AE4a59f267346ea31F984", # UniswapV3
+    "0xc35DADB65012eC5796536bD9864eD8773aBc74C4", # SushiSwapV2
+    "0x6EcCab422D763aC031210895C81787E87B43A652", # CamelotV2
+    "0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B", # CamelotV3
+    "0x02a84c1b3BBD7401a5f7fa98a384EBC70bB5749E", # PancakeSwap
+    "0xC7a590291e07B9fe9E64b86c58fD8fC764308C4A", # KyberSwap
+    "0xb43120c4745967fa9b93E79C149E66B0f2D6Fe0c", # TraderJoe
+    "0xBA12222222228d8Ba445958a75a0704d566BF2C8", # Balancer Vault
+    "0x0000000022d53366457f9d5e68ec105046fc4383", # Curve Address Provider
+]
+
+# Map of pool bytecode hash -> pool type string for identification.
+[validator.whitelisted_bytecode_hashes]
+"0x549484cffc317f30dff32fd21f7c10ca918bae5dcef778927bd55f057d5f72fd" = "Curve"
+"0xa9695275563c31643f88b1d24a6ebddce09e67d39e0211b266fb4d905ae78858" = "PancakeSwap"
+"0xc9c2956ac40175996b15ae3a750b84226736322c5c1aef3e6815b77aab3cb27e" = "Curve"
+"0xbebcc10068d8c77f33814f969fe389904fa042156c7faa1ef9d8fc3732cb4185" = "Curve"
+"0x0529d9b8f96f07da894f29d12b06e1d3ff2e5f8b2c2be7a357386de97afde38f" = "CamelotV2"
+"0x7b58ee53d7ee6a3f3ea1febecae1517b8e2fab8a0ef878236758b01ad9e02e15" = "Curve"
+"0xc8fdfe50c4d1f5ababdcfb2253221d74df60dc557eceb5e83aa840d1576937b8" = "Curve"
+"0x5b83bdbcc56b2e630f2807bbadd2b0c21619108066b92a58de081261089e9ce5" = "UniswapV2"
+
+[validator.protocol_addresses]
+balancer_vault = "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
+curve_address_provider = "0x0000000022d53366457f9d5e68ec105046fc4383"
+
+[validator.activity_rules]
+min_v2_reserve_usd = 250.0
+min_v3_liquidity_usd = 50.0
+max_missing_state_hits = 3
+
+[validator.normalization_rules]
+min_liquidity_usd = 300.0
+max_decimal_diff = 12
+max_token_decimals = 24
+
+# -------------------------------------------------------------------
+# Background Discoverer Configuration
+# -------------------------------------------------------------------
+[background_discoverer]
+# Intervalo para Fast Lane (check_pools_activity + calculate_weights)
+# ✅ OPTIMIZADO: Reducido de 60s a 300s (5 minutos) con multicall + batch prices
+fast_lane_interval_seconds = 300  # 5 minutos
+
+# -------------------------------------------------------------------
+# Background Validator Configuration
+# -------------------------------------------------------------------
+[background_validator]
+# Intervalo adaptativo para validación de pools
+# ✅ OPTIMIZADO: Reducido de 15-30s a 60-120s
+min_interval_seconds = 60
+max_interval_seconds = 120
+target_cache_hit_rate = 0.90  # Si hit rate < 90%, aumentar frecuencia
+
+# -------------------------------------------------------------------
+# JIT Fetcher Configuration
+# -------------------------------------------------------------------
+[jit_fetcher]
+# Configuración de JIT State Fetcher
+# ✅ OPTIMIZADO: Eliminar balances por defecto (ahorro 50% de calls)
+fetch_balances = false  # Eliminar balances por defecto
+validate_consistency = false  # Validación opcional en background
+
+transfer_tax_tokens = [
+    # "0x0000000000000000000000000000000000000000"
+]
+
+# Relax anchor requirement to avoid over-filtering while we finish oracle setup
+require_anchor_token = false
+
+# -------------------------------------------------------------------
+# Background Discovery Configuration
+# -------------------------------------------------------------------
+[discovery]
+initial_sync_blocks = 1500 # ✅ FIX: Reduced from 10000 to 1500 to prevent RPC timeouts (max safe range for public RPCs)
+interval_seconds = 120 # Optimized: balance between discovery freshness and RPC usage (covers 17k pools in ~20-30 minutes)
+db_path = "postgresql://mig_topology_user:mig_topology_pass@localhost:5432/mig_topology"
+# ✅ FASE 1.3: Event indexing configuration
+[discovery.event_indexing]
+enabled = true # Enable event indexing for gap detection
+gap_detection_interval_seconds = 300 # Check for gaps every 5 minutes
+
+[discovery.adaptive_sampling]
+enabled = true
+hot_threshold = 0.8 # Pools with weight > this are "hot"
+warm_interval_blocks = 10 # Update "warm" pools every 10 blocks
+cold_interval_blocks = 50 # Update "cold" pools every 50 blocks
+
+[discovery.protocol_fingerprints.uniswap_v2]
+dex_label = "UniswapV2"
+aliases = ["SushiSwapV2", "CamelotV2"]
+factories = [
+    "0xc35DADB65012eC5796536bD9864eD8773aBc74C4", # SushiSwap V2
+    "0x6EcCab422D763aC031210895C81787E87B43A652"  # Camelot V2
+]
+bytecode_hashes = [
+    "0x5b83bdbcc56b2e630f2807bbadd2b0c21619108066b92a58de081261089e9ce5"
+]
+
+[discovery.protocol_fingerprints.uniswap_v3]
+dex_label = "UniswapV3"
+aliases = []
+factories = [
+    "0x1F98431c8aD98523631AE4a59f267346ea31F984"
+]
+
+[discovery.protocol_fingerprints.curve]
+dex_label = "Curve"
+bytecode_hashes = [
+    "0x549484cffc317f30dff32fd21f7c10ca918bae5dcef778927bd55f057d5f72fd",
+    "0xc9c2956ac40175996b15ae3a750b84226736322c5c1aef3e6815b77aab3cb27e",
+    "0xbebcc10068d8c77f33814f969fe389904fa042156c7faa1ef9d8fc3732cb4185",
+    "0x7b58ee53d7ee6a3f3ea1febecae1517b8e2fab8a0ef878236758b01ad9e02e15",
+    "0xc8fdfe50c4d1f5ababdcfb2253221d74df60dc557eceb5e83aa840d1576937b8"
+]
+
+[discovery.protocol_fingerprints.balancer]
+dex_label = "Balancer"
+aliases = ["BalancerV3"]
+factories = [
+    "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
+]
+
+[discovery.pending_queue]
+base_delay_ms = 5000
+max_delay_ms = 120000
+max_attempts = 6
+max_batch = 64
+
+[discovery.adaptive_scheduler]
+enabled = true
+base_weight = 1.0
+min_weight = 0.2
+latency_smoothing = 0.25
+latency_normalizer_ms = 3000.0
+failure_penalty = 0.75
+recovery_factor = 0.5
+# -------------------------------------------------------------------
+# Signer Configuration (NOT USED IN SDK - Trading/Execution feature)
+# -------------------------------------------------------------------
+# [signer]
+# This section is not used by the SDK (read-only topology mapping)
+
+# -------------------------------------------------------------------
+# Risk Management (NOT USED IN SDK - Trading/Execution feature)
+# -------------------------------------------------------------------
+# [risk_management]
+# This section is not used by the SDK (read-only topology mapping)
+
+# -------------------------------------------------------------------
+# Execution Parameters (NOT USED IN SDK - Trading/Execution feature)
+# -------------------------------------------------------------------
+# [execution]
+# This section is not used by the SDK (read-only topology mapping)
+
+# -------------------------------------------------------------------
+# Performance Tuning
+# -------------------------------------------------------------------
+[performance]
+precision_check_top_n = 3
+state_refresh_top_k = 2500 # Top K pools to keep in hot memory
+shadow_estimate_top_n = 3 # Top N routes for detailed simulation
+get_logs_chunk_size = 1500 # Paid tier allows larger ranges
+get_logs_max_concurrency = 4 # Moderate concurrency for paid tier
+global_qps_limit = 30 # Higher QPS for paid tier
+multicall_batch_size = 500 # ✅ OPTIMIZACIÓN: Aumentado a 500 para mejor throughput (según plan de mejoras)
+max_concurrent_requests_per_host = 16 # ✅ OPTIMIZACIÓN: Aumentado a 16 para mejor paralelismo (según plan de mejoras)
+simulation_concurrency = 6
+# ✅ FASE 4: Cache JIT ajustado para RPC remotos
+jit_cache_ttl_ms = 60000 # 60 segundos (vs 30s para nodo local)
+jit_cache_tolerance_blocks = 3 # Más conservador (vs 5 para nodo local)
+# HFT optimizations
+hot_pool_refresh_interval_ms = 6000 # 6s (~1 block)
+cold_pool_refresh_interval_ms = 45000 # 45s (~4 blocks)
+route_upper_bound_filter = true # Enable branch-and-bound pre-filtering
+# Performance optimizations
+max_route_hops = 3
+route_search_branching_factor = 6
+triangular_detection = true
+multihop_routing = true
+# Hot pool detector parallelization
+hot_detector_max_hot_pools = 500
+hot_detector_max_parallel_groups = 6
+hot_detector_max_pools_per_group = 160
+
+# -------------------------------------------------------------------
+# Data Quality Settings (nuevos)
+# -------------------------------------------------------------------
+[data_quality]
+state_max_age_secs = 180  # 3 min para mayor frescura en simulación
+price_deviation_pct_threshold = 2.0
+min_liquidity_usd = 5000
+approximate_max_hops = 0
+max_ratio_per_route = 2.0
+
+# -------------------------------------------------------------------
+# Warming Phase Configuration
+# -------------------------------------------------------------------
+[warming]
+enabled = true
+candidate_limit = 600
+hot_pool_target = 500
+min_liquidity_usd = 500.0
+max_liquidity_usd = 1000000000.0 # 1B USD cap to catch outliers
+cross_check_bps = 200.0
+minimum_viable_pools = 240
+dex_slots = [
+    { dex = "UniswapV3", share = 0.43, floor = 90 },
+    { dex = "UniswapV2", share = 0.25, floor = 60 },
+    { dex = "SushiSwapV2", share = 0.12, floor = 30 },
+    { dex = "Balancer", share = 0.08, floor = 20 },
+    { dex = "Curve", share = 0.08, floor = 20 },
+    { dex = "KyberSwap", share = 0.03, floor = 10 }
+]
+
+# -------------------------------------------------------------------
+# Metrics and Logging
+# -------------------------------------------------------------------
+[metrics]
+enabled = true
+port = 9101
+
+[log]
+level = "info" # "trace", "debug", "info", "warn", "error"
+format = "pretty" # "pretty" or "json"
+
+# -------------------------------------------------------------------
+# Feature Flags
+# -------------------------------------------------------------------
+[features]
+enable_execution = false # SDK is read-only (topology mapping only, no transaction execution)
+log_json_report = true # Log a JSON summary of each block's pipeline run
+# ✅ FASE 3.2: Feature flags completos
+enable_websocket_blocks = true # Use WebSocket for real-time block number updates
+enable_polling_fallback = true # Fallback to polling if WebSocket fails
+enable_event_indexing = true # Index events for gap detection
+enable_price_fallback_chain = true # Use fallback chain for price feeds
+enable_merkle_cache = true # Use Merkle tree for cache validation
+enable_streaming_multicall = false # Future: Streaming multicall (not yet implemented)
+
+# Lists of DEX adapters to enable for each binary.
+[features.enabled_dexes]
+fast_runner = [
+    "UniswapV2",
+    "UniswapV3",
+    "SushiSwapV2",
+    "CamelotV2"
+]
+background_discoverer = [
+    "UniswapV2",
+    "UniswapV3",
+    "SushiSwapV2",
+    "CamelotV2"
+]
+
+# -------------------------------------------------------------------
+# Price Feeds (Chainlink) - Token -> Aggregator mapping
+# -------------------------------------------------------------------
+[price_feeds]
+cache_ttl_seconds = 15
+enable_twap_fallback = true
+price_deviation_tolerance_bps = 200
+feed_registry_address = "0x47Fb2585D2C56Fe188D0E6Ec628a38b74fCeeeDf"
+
+[price_feeds.chainlink_oracles]
+# WETH -> ETH/USD
+"0x82aF49447D8a07e3bd95BD0d56f35241523fBab1" = "0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612"
+# USDC (native) -> USDC/USD
+"0xaf88d065e77c8cC2239327C5EDb3A432268e5831" = "0x50834F3163758fcC1Df9973b6e91f0F0F0434aD3"
+# USDC.e (bridged) -> USDC.e/USD
+"0xFF970A61A04b1Ca14834A43f5de4533eBDDB5CC8" = "0x8f54218900e406355C74509B9056b3350a00455B"
+# USDT -> USDT/USD
+"0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9" = "0x3f3f5dF88dC9F13eac63DF89EC16ef6e7E25DdE7"
+# ARB -> ARB/USD
+"0x912ce59144191c1204e64559fe8253a0e49e6548" = "0xb2A824043730FE05F3DA2efaFa1CBbe83fa548D6"
+# DAI -> DAI/USD
+"0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1" = "0xc5C8E77B397E531B8EC06BFb0048328B30E9eCfB"
+# WBTC -> WBTC/USD
+"0x2f2a2543B76A4166549F7aab2e75Bef0aefC5B0f" = "0xd0C7101eACbB49F3deCcCc166d238410D6D46d57"
+# LINK -> LINK/USD
+"0xf97f4df75117a78c1A5a0DBb814Af92458539FB4" = "0x86E53CF1B870786351Da77A57575e79CB55812CB"
+# FRAX -> FRAX/USD
+"0x17FC002b466eEc40DaE837Fc4bE5c67993ddBd6F" = "0x0809E3d38d1B4214958faf06D8b1B1a2b73f2ab8"
+# CRV -> CRV/USD
+"0x11cDb42B0EB46D95F990bEDD4695A6e3fA034978" = "0xaebDA2c976cfd1eE1977Eac079B4382acb849325"
+# crvUSD -> crvUSD/USD
+"0x498Bf2B1e120FeD3ad3D42EA2165E9b73f99C1e5" = "0x0a32255dd4BB6177C994bAAc73E0606fDD568f66"
+# PENDLE -> PENDLE/USD
+"0x0c880f6761F1af8d9Aa9C466984b80DAb9a8c9e8" = "0x66853E19d73c0F9301fe099c324A1E9726953433"
+# GNS -> GNS/USD
+"0x18c11FD286C5EC11c3b683Caa813B77f5163A122" = "0xE89E98CE4E19071E59Ed4780E0598b541CE76486"
+# RDNT -> RDNT/USD
+"0x3082CC23568eA640225c2467653dB90e9250AaA0" = "0x20d0Fcab0ECFD078B036b6CAf1FaC69A6453b352"
+# SUSHI -> SUSHI/USD
+"0xd4d42F0b6DEF4CE0383636770eF773390d85c61A" = "0xb2A8BA74cbca38508BA1632761b56C897060147C"
+# LUSD -> LUSD/USD
+"0x93b346b6BC2548dA6A1E7d98E9a421B42541425b" = "0x0411D28c94d85A36bC72Cb0f875dfA8371D8fFfF"
+# XAI -> XAI/USD
+"0x4Cb9a7AE498CEDcBb5EAe9f25736aE7d428C9D66" = "0x806c532D543352e7C344ba6C7F3F00Bfbd309Af1"
+# ZRO -> ZRO/USD
+"0x6985884C4392D348587B19cb9eAAf157F13271cd" = "0x1940fEd49cDBC397941f2D336eb4994D599e568B"
+# wstETH -> wstETH/ETH
+"0x5979D7b546E38E414F7E9822514be443A4800529" = "0xb523AE262D20A936BC152e6023996e46FDC2A95D"
+
+# -------------------------------------------------------------------
+# Backtester Configuration (NOT USED IN SDK - Trading/Execution feature)
+# -------------------------------------------------------------------
+# [backtester]
+# This section is not used by the SDK (read-only topology mapping)
+
+# -------------------------------------------------------------------
+# Strategy Configuration (NOT USED IN SDK - Trading/Execution feature)
+# -------------------------------------------------------------------
+# [strategy]
+# This section is not used by the SDK (read-only topology mapping)
+
+# -------------------------------------------------------------------
+# Adaptive Sizing Configuration
+# -------------------------------------------------------------------
+[sizing]
+v2_fraction_divisor = 200            # 0.5% of V2 reserve_in
+v3_liquidity_fraction = 0.02         # Lower to reduce oversizing on V3
+curve_liquidity_fraction = 0.001     # Scale factor for Curve (weight proxy)
+balancer_liquidity_fraction = 0.005  # Scale factor for Balancer (weight proxy)
+min_usd = 500.0
+max_usd = 500000.0
+enable_ufr_micro_sampling = false
+target_impact_bps = 75
+enable_liquidity_cap = true
+liquidity_cap_fraction = 0.04
+# Enable optimal search with pool filtering
+enable_optimal_search = true         # Enable pool filtering during profit estimation
+use_heuristic_if_hops_gt = 3         # Use optimal search for routes with <= 3 hops
+max_search_points = 13               # Maximum candidate points to evaluate
+max_search_latency_ms = 50           # Maximum latency for search (ms)
+
+# -------------------------------------------------------------------
+# Professional Pool Filters Configuration
+# -------------------------------------------------------------------
+[pool_filters]
+# Minimum effective liquidity in ETH equivalent (min of both reserves)
+min_effective_liquidity_eth = 3.0
+
+# Maximum price deviation from global reference price (in basis points)
+max_price_deviation_bps = 30  # 0.3%
+
+# Maximum blocks since last update (stale data filter)
+max_stale_blocks = 3
+
+# Minimum 24h volume in USD (requires DB/API integration)
+min_volume_24h_usd = 50000.0
+
+# Allowed fee tiers for V3 pools (in basis points: 5=0.05%, 30=0.3%, 100=1%)
+allowed_fee_tiers = [100, 500, 3000, 10000]
+
+# Allowed DEX names (whitelist)
+allowed_dexs = [
+    "UniswapV3",      # V3 pools use "UniswapV3" (no space)
+    "Uniswap V3",    # Keep for compatibility
+    "UniswapV2",     # V2 pools use "UniswapV2" (no space)
+    "UniswapV2",     # Keep for compatibility
+    "Sushiswap",
+    "Camelot",
+    "Kyber Elastic",
+    "KyberSwap",     # KyberSwap pools use "KyberSwap"
+    "Ramses V2",
+    "Ramses V3",
+    "Trader Joe",
+    "Balancer"
+]
+
+# Minimum reserve multiplier: reserve >= amount_in * multiplier
+min_reserve_multiplier = 5.0
+
+# -------------------------------------------------------------------
+# Graph Service Configuration
+# -------------------------------------------------------------------
+[graph]
+# Interval for graph weight updates (seconds)
+update_interval_seconds = 60
+
+# -------------------------------------------------------------------
+# Simulator Configuration
+# -------------------------------------------------------------------
+[simulator]
+# Enable local V3 simulator (default: true)
+# Uses deterministic local calculations instead of RPC calls for V3 swaps
+enable_local_v3 = true
+
+# Allow RPC fallback if local simulator fails (default: true)
+# If false, local simulator failures will return zero instead of falling back to RPC
+allow_rpc_fallback = true
+
+# Shadow mode: Compare local vs RPC in background (default: false, dev only)
+# When enabled, performs RPC calls in background to validate local simulator accuracy
+# Does NOT block the pipeline - runs asynchronously
+shadow_mode_enabled = false
+
+# Maximum deviation in bps before alerting (shadow mode)
+# If local and RPC results differ by more than this, a warning is logged
+shadow_max_deviation_bps = 10  # 0.1%
+
+# -------------------------------------------------------------------
+# MVP Configuration (Corset Mode)
+# -------------------------------------------------------------------
+[mvp]
+# Enable MVP restrictions (filtering mode)
+# When enabled, SDK operates in restricted mode with minimal scope
+enabled = false  # Set to true to restrict scope for testing/development
+
+# DEX whitelist (only these DEXs will be used)
+# Empty list means no DEX filtering
+dex_whitelist = [
+    "UniswapV2",
+    "UniswapV3",
+    "SushiSwapV2",
+    "CamelotV2"
+]
+
+# Token whitelist (only these tokens can be entry tokens)
+# Format: addresses in hex (0x...)
+# Empty list means no token filtering
+token_whitelist = [
+    "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", # WETH
+    "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", # USDC
+    "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", # USDT
+    "0xFF970A61A04b1Ca14834A43f5de4533eBDDB5CC8", # USDC.e
+    "0x912ce59144191c1204e64559fe8253a0e49e6548"  # ARB
+]
+
+# Pair whitelist (only these pairs allowed, format: "TOKEN0-TOKEN1")
+# Empty list means no pair filtering
+pair_whitelist = [
+]
+
+# Maximum number of hops in routes
+max_hops = 2
+
+# Maximum routes to process per cycle
+max_routes_per_cycle = 50
+
+# Re-validate reserves (validation check)
+# This validates pool state consistency
+revalidate_reserves_before_execution = true
+
+# Maximum reserve change allowed (in basis points, 50 = 0.5%)
+# If reserves change more than this, the pool state is considered invalid
+max_reserve_change_bps = 50
+
+# Maximum validation failures allowed per day
+max_reverts_per_day = 3
+
+[mvp.auto]
+# Autonomous dynamic pair selection (no manual lists)
+# Disabled by default to preserve current behavior; enable to activate
+enabled = true
+# Long-tail TVL range (USD)
+min_tvl_usd = 100.0
+max_tvl_usd = 200000.0
+# Skip top-K pools by TVL (avoid mainstream)
+skip_top_tvl_pools = 0
+# Exclude tokens (addresses) from dynamic pairs (optional)
+exclude_tokens = [
+    # "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", # WETH
+]
+# Optional constraints (set only if desired)
+# min_pool_age_blocks = 500
+# max_pool_age_days = 30
+max_price_impact_bps = 30
+# Cap number of dynamic pairs to reduce load
+max_pairs = 200
+min_profit_to_gas_ratio = 3.0
+max_exec_per_day = 30

@@ -1,0 +1,35 @@
+# Normalize line endings and avoid CRLF/LF churn
+* text=auto eol=lf
+
+# Rust + config + docs
+*.rs text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.sh text eol=lf
+*.sql text eol=lf
+
+# Windows scripts keep CRLF
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binaries
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.so binary
+*.dylib binary
+*.dll binary
+*.exe binary
+*.rlib binary
+*.rmeta binary
+*.a binary
+

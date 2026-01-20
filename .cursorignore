@@ -1,0 +1,65 @@
+# Cursor ignore file - Exclude large directories from indexing
+# This reduces memory usage and prevents OOM crashes
+
+# Rust build artifacts (can be 10GB+)
+target/
+**/target/
+target/debug/
+target/release/
+target/doc/
+.cargo/registry/
+.cargo/git/
+
+# Large binary files
+*.so
+*.dylib
+*.dll
+*.exe
+*.rlib
+*.rmeta
+*.a
+
+# Logs and temporary files (can be large)
+# NOTE: we do NOT ignore all *.log so we can keep logs/agent_actions.log for auditability.
+benchmark*.log
+benchmark_output*.log
+build.log
+cargo*.log
+*.jsonl
+*.tmp
+*.temp
+*.cache
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation builds
+target/doc/
+docs/_build/
+
+# Flight recorder logs
+flight_recorder_logs/
+benchmarks/*.jsonl
+
+# Database dumps
+*.sql
+*.dump
+
+# Node modules (if any)
+node_modules/
+
+# Python cache (if any)
+__pycache__/
+*.pyc
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Historial
+.history/
+**/.history/
