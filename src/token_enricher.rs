@@ -124,10 +124,10 @@ impl TokenEnricher {
         }
 
         batch_upsert_tokens(db, upserts).await?;
-        
+
         // Update cache size metrics after inserting decimals
         cache.record_cache_sizes().await;
-        
+
         info!(
             "TokenEnricher: Enriched {}/{} tokens successfully",
             enriched_count, total_to_fetch

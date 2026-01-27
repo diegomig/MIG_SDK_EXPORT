@@ -1,6 +1,6 @@
-use rust_decimal::Decimal;
-use ethers::types::{U256, Address};
 use crate::types::conversions::{u256_to_decimal, ConversionError};
+use ethers::types::{Address, U256};
+use rust_decimal::Decimal;
 
 // Dato crudo de ethers-rs (lo que recibes)
 #[derive(Debug, Clone)]
@@ -21,8 +21,8 @@ pub struct NormalizedPool {
     pub pool_address: String,
     pub token0_address: String,
     pub token1_address: String,
-    pub fee_bps: u16,  // En basis points
-    pub price: Decimal,  // Precio real token1/token0
+    pub fee_bps: u16,   // En basis points
+    pub price: Decimal, // Precio real token1/token0
     pub liquidity_usd: Decimal,
     pub dex_type: DexType,
 }

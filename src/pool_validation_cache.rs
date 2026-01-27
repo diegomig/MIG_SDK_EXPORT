@@ -2,9 +2,9 @@
 // TTL dual: por bloques y por tiempo para mantener frescura
 
 use dashmap::DashMap;
+use ethers::prelude::{Address, U256};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
-use ethers::prelude::{Address, U256};
 
 #[derive(Clone, Debug)]
 pub struct CachedPoolValidation {
@@ -44,7 +44,7 @@ impl PoolValidationCache {
     /// Crear cache con valores por defecto optimizados (5 minutos)
     pub fn new_default() -> Self {
         Self::new(
-            25, // TTL: 25 bloques (~5 min en Ethereum)
+            25,                       // TTL: 25 bloques (~5 min en Ethereum)
             Duration::from_secs(300), // TTL: 5 minutos
         )
     }
@@ -54,9 +54,10 @@ impl PoolValidationCache {
         match self.cache.get(addr) {
             Some(cached) => {
                 // Validar frescura por bloques Y tiempo
-                let block_fresh = current_block.saturating_sub(cached.cached_at_block) < self.ttl_blocks;
+                let block_fresh =
+                    current_block.saturating_sub(cached.cached_at_block) < self.ttl_blocks;
                 let time_fresh = cached.last_checked.elapsed() < self.ttl_duration;
-                
+
                 if block_fresh && time_fresh {
                     self.metrics.hits.fetch_add(1, Ordering::Relaxed);
                     Some(cached.is_valid)
@@ -76,7 +77,13 @@ impl PoolValidationCache {
     }
 
     /// Insertar validación en cache
-    pub fn insert(&self, addr: Address, is_valid: bool, liquidity: Option<U256>, current_block: u64) {
+    pub fn insert(
+        &self,
+        addr: Address,
+        is_valid: bool,
+        liquidity: Option<U256>,
+        current_block: u64,
+    ) {
         let cached = CachedPoolValidation {
             is_valid,
             liquidity,
@@ -84,13 +91,21 @@ impl PoolValidationCache {
             last_checked: Instant::now(),
             validation_count: 1,
         };
-        
+
         self.cache.insert(addr, cached);
-        self.metrics.total_validations.fetch_add(1, Ordering::Relaxed);
+        self.metrics
+            .total_validations
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     /// Actualizar validación existente (incrementar contador)
-    pub fn update(&self, addr: &Address, is_valid: bool, liquidity: Option<U256>, current_block: u64) {
+    pub fn update(
+        &self,
+        addr: &Address,
+        is_valid: bool,
+        liquidity: Option<U256>,
+        current_block: u64,
+    ) {
         if let Some(mut cached) = self.cache.get_mut(addr) {
             cached.is_valid = is_valid;
             cached.liquidity = liquidity;
@@ -105,12 +120,12 @@ impl PoolValidationCache {
     /// Invalidar pools stale proactivamente
     pub fn invalidate_stale(&self, current_block: u64) -> usize {
         let mut removed = 0;
-        
+
         self.cache.retain(|_addr, cached| {
             let blocks_since_cache = current_block.saturating_sub(cached.cached_at_block);
-            let is_stale = blocks_since_cache >= self.ttl_blocks 
-                        || cached.last_checked.elapsed() >= self.ttl_duration;
-            
+            let is_stale = blocks_since_cache >= self.ttl_blocks
+                || cached.last_checked.elapsed() >= self.ttl_duration;
+
             if is_stale {
                 removed += 1;
                 false
@@ -118,8 +133,10 @@ impl PoolValidationCache {
                 true
             }
         });
-        
-        self.metrics.stale_evictions.fetch_add(removed, Ordering::Relaxed);
+
+        self.metrics
+            .stale_evictions
+            .fetch_add(removed, Ordering::Relaxed);
         removed as usize
     }
 
@@ -128,11 +145,15 @@ impl PoolValidationCache {
         let hits = self.metrics.hits.load(Ordering::Relaxed);
         let misses = self.metrics.misses.load(Ordering::Relaxed);
         let total = hits + misses;
-        
+
         CacheMetricsSnapshot {
             hits,
             misses,
-            hit_rate: if total > 0 { hits as f64 / total as f64 } else { 0.0 },
+            hit_rate: if total > 0 {
+                hits as f64 / total as f64
+            } else {
+                0.0
+            },
             cache_size: self.cache.len(),
             stale_evictions: self.metrics.stale_evictions.load(Ordering::Relaxed),
         }
@@ -162,4 +183,3 @@ pub struct CacheMetricsSnapshot {
     pub cache_size: usize,
     pub stale_evictions: u64,
 }
-

@@ -18,40 +18,40 @@
 //!
 //! Press Ctrl+C to stop gracefully.
 
+use anyhow::Result;
+use ethers::prelude::{Address, Http, Provider};
+#[cfg(feature = "redis")]
+use mig_topology_sdk::redis_manager::{self, RedisConfig, RedisManager};
+#[cfg(feature = "redis")]
+use mig_topology_sdk::route_precomputer::RoutePrecomputer;
 use mig_topology_sdk::{
     adapters::{uniswap_v2::UniswapV2Adapter, uniswap_v3::UniswapV3Adapter},
+    block_number_cache::BlockNumberCache,
+    cache::CacheManager,
     database,
     dex_adapter::DexAdapter,
-    flight_recorder::{FlightRecorder, flight_recorder_writer},
+    flight_recorder::{flight_recorder_writer, FlightRecorder},
     graph_service::GraphService,
+    hot_pool_manager::HotPoolManager,
     orchestrator::Orchestrator,
+    pool_validation_cache::PoolValidationCache,
     price_feeds::PriceFeed,
     rpc_pool::RpcPool,
     settings::Settings,
     validator::PoolValidator,
-    cache::CacheManager,
-    hot_pool_manager::HotPoolManager,
-    block_number_cache::BlockNumberCache,
-    pool_validation_cache::PoolValidationCache,
     weight_refresher,
 };
-#[cfg(feature = "redis")]
-use mig_topology_sdk::route_precomputer::RoutePrecomputer;
-#[cfg(feature = "redis")]
-use mig_topology_sdk::redis_manager::{self, RedisManager, RedisConfig};
-use anyhow::Result;
-use ethers::prelude::{Address, Provider, Http};
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::str::FromStr;
 use std::fs;
 use std::path::Path;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::time::Instant;
 use tokio::signal;
 use tokio::time::{interval, Duration};
-use std::time::Instant;
 
 /// ✅ REFACTORIZADO: Usa función compartida de hot_pool_manager
-/// 
+///
 /// Esta función ahora delega a `hot_pool_manager::populate_hot_pool_manager_from_db`
 /// para evitar duplicación de código y corregir el bug del fallback.
 async fn populate_hot_pool_manager_from_db<M>(
@@ -64,24 +64,25 @@ where
     M: ethers::prelude::Middleware + 'static,
 {
     use mig_topology_sdk::hot_pool_manager;
-    
+
     hot_pool_manager::populate_hot_pool_manager_from_db(
         hot_pool_manager,
         graph_service,
         db_pool,
         rpc_pool,
-        10_000.0,  // min_weight: $10K USD
-        200,       // limit: top 200 candidatos
-        50,        // max_hot_pools: top 50 pools
-        true,      // enable_fallback_refresh: sí, ejecutar full refresh si no hay candidatos
-    ).await
+        10_000.0, // min_weight: $10K USD
+        200,      // limit: top 200 candidatos
+        50,       // max_hot_pools: top 50 pools
+        true,     // enable_fallback_refresh: sí, ejecutar full refresh si no hay candidatos
+    )
+    .await
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Load environment variables from .env file
     dotenv::dotenv().ok();
-    
+
     env_logger::init();
 
     println!("🚀 Starting Background Discoverer Service");
@@ -113,9 +114,9 @@ async fn main() -> Result<()> {
         .chainlink_oracles
         .iter()
         .filter_map(|(token, oracle)| {
-            Address::from_str(token).ok().and_then(|t| {
-                Address::from_str(oracle).ok().map(|o| (t, o))
-            })
+            Address::from_str(token)
+                .ok()
+                .and_then(|t| Address::from_str(oracle).ok().map(|o| (t, o)))
         })
         .collect();
 
@@ -140,38 +141,50 @@ async fn main() -> Result<()> {
         settings.price_feeds.price_deviation_tolerance_bps,
     ));
     println!("✅ Price feed initialized");
-    
+
     // ✅ WARM-UP: Initialize SharedPriceCache and warm up base prices
-    use mig_topology_sdk::background_price_updater::{SharedPriceCache, BackgroundPriceUpdater, PriceSource};
+    use mig_topology_sdk::background_price_updater::{
+        BackgroundPriceUpdater, PriceSource, SharedPriceCache,
+    };
     let price_cache = Arc::new(SharedPriceCache::new());
-    
+
     // Base tokens to warm up (anchor tokens + common tokens)
     let base_tokens = anchor_tokens.clone();
-    
-    println!("🔥 Warming up base prices for {} tokens...", base_tokens.len());
+
+    println!(
+        "🔥 Warming up base prices for {} tokens...",
+        base_tokens.len()
+    );
     let warmup_start = Instant::now();
-    
+
     // Attempt to fetch base prices with longer timeout
     match price_feed
         .get_usd_prices_batch_with_chainlink_timeout(
             &base_tokens,
             None,
-            Duration::from_millis(2000)
+            Duration::from_millis(2000),
         )
         .await
     {
         Ok(prices) => {
             let valid_count = prices.values().filter(|&&p| p > 0.0).count();
             if valid_count < base_tokens.len() / 2 {
-                warn!("⚠️ Only {} out of {} base prices available after warm-up", valid_count, base_tokens.len());
+                warn!(
+                    "⚠️ Only {} out of {} base prices available after warm-up",
+                    valid_count,
+                    base_tokens.len()
+                );
             } else {
                 // Update SharedPriceCache with valid prices
-                let valid_prices: HashMap<Address, f64> = prices.into_iter()
-                    .filter(|(_, p)| *p > 0.0)
-                    .collect();
+                let valid_prices: HashMap<Address, f64> =
+                    prices.into_iter().filter(|(_, p)| *p > 0.0).collect();
                 if !valid_prices.is_empty() {
                     price_cache.update_batch(valid_prices.clone(), PriceSource::Chainlink);
-                    println!("✅ Warm-up complete: {} valid prices in {:?}", valid_count, warmup_start.elapsed());
+                    println!(
+                        "✅ Warm-up complete: {} valid prices in {:?}",
+                        valid_count,
+                        warmup_start.elapsed()
+                    );
                     for (token, price) in valid_prices.iter().take(5) {
                         println!("  {} = ${:.2}", token, price);
                     }
@@ -182,7 +195,7 @@ async fn main() -> Result<()> {
             warn!("⚠️ Warm-up failed: {}. Continuing anyway...", e);
         }
     }
-    
+
     // Initialize BackgroundPriceUpdater to keep prices fresh
     let critical_tokens = base_tokens.clone();
     let background_updater = Arc::new(BackgroundPriceUpdater::new(
@@ -191,7 +204,7 @@ async fn main() -> Result<()> {
         critical_tokens,
         5, // Update every 5 seconds
     ));
-    
+
     // Start background updater in background task
     let updater_clone = background_updater.clone();
     tokio::spawn(async move {
@@ -220,28 +233,25 @@ async fn main() -> Result<()> {
     println!("✅ DEX adapters created ({} adapters)", adapters.len());
 
     // 8. Create pool validator
-    let validator = Arc::new(PoolValidator::new(
-        rpc_pool.clone(),
-        &settings.validator,
-    ));
+    let validator = Arc::new(PoolValidator::new(rpc_pool.clone(), &settings.validator));
     println!("✅ Pool validator created");
 
     // 8.5. Initialize Flight Recorder for metrics collection
     let (flight_recorder, event_rx) = FlightRecorder::new();
-    
+
     // Create logs directory if it doesn't exist
     let logs_dir = Path::new("logs");
     if !logs_dir.exists() {
         fs::create_dir_all(logs_dir)?;
         println!("✅ Created logs directory");
     }
-    
+
     // Generate output filename with timestamp
     use chrono::Utc;
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
     let output_file = format!("logs/flight_recorder_{}.jsonl", timestamp);
     let output_file_clone = output_file.clone();
-    
+
     // ✅ CRITICAL: Spawn writer task BEFORE enabling recorder
     tokio::spawn(async move {
         match flight_recorder_writer(event_rx, output_file_clone.clone()).await {
@@ -249,20 +259,21 @@ async fn main() -> Result<()> {
             Err(e) => eprintln!("❌ Flight Recorder writer error: {}", e),
         }
     });
-    
+
     // Enable Flight Recorder
     flight_recorder.enable();
     let flight_recorder_arc = Arc::new(flight_recorder);
     println!("✅ Flight Recorder initialized and enabled");
 
     // 9. Create BlockNumberCache for RPC optimization (moved before orchestrator)
-    let (provider_for_cache, _permit, endpoint) = rpc_pool.get_next_provider_with_endpoint().await?;
+    let (provider_for_cache, _permit, endpoint) =
+        rpc_pool.get_next_provider_with_endpoint().await?;
     let block_number_cache = Arc::new(
         BlockNumberCache::new(
             provider_for_cache,
             Duration::from_secs(1), // Update interval: 1 second
         )
-        .with_flight_recorder(Some(flight_recorder_arc.clone()), endpoint)
+        .with_flight_recorder(Some(flight_recorder_arc.clone()), endpoint),
     );
     println!("✅ BlockNumberCache initialized");
 
@@ -284,20 +295,25 @@ async fn main() -> Result<()> {
     // Uses default redis://localhost:6379 if REDIS_URL not set (connects to Docker container)
     #[cfg(feature = "redis")]
     let redis_manager: Option<Arc<tokio::sync::Mutex<redis_manager::RedisManager>>> = {
-        let redis_url = std::env::var("REDIS_URL")
-            .unwrap_or_else(|_| "redis://localhost:6379".to_string());
-        
+        let redis_url =
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
+
         match redis_manager::RedisManager::new(redis_manager::RedisConfig {
             url: redis_url.clone(),
             pool_state_ttl: 10,
             route_cache_ttl: 60,
-        }).await {
+        })
+        .await
+        {
             Ok(manager) => {
                 println!("✅ Redis Manager initialized (connecting to {})", redis_url);
                 Some(Arc::new(tokio::sync::Mutex::new(manager)))
             }
             Err(e) => {
-                println!("⚠️  Redis Manager initialization failed ({}): {} (continuing without Redis)", redis_url, e);
+                println!(
+                    "⚠️  Redis Manager initialization failed ({}): {} (continuing without Redis)",
+                    redis_url, e
+                );
                 None
             }
         }
@@ -325,7 +341,7 @@ async fn main() -> Result<()> {
         .await?
         .with_hot_pool_manager(hot_pool_manager.clone())
         .with_block_number_cache(block_number_cache.clone())
-        .with_shared_price_cache(price_cache.clone())
+        .with_shared_price_cache(price_cache.clone()),
     );
     println!("✅ Graph service initialized with SharedPriceCache");
 
@@ -333,10 +349,16 @@ async fn main() -> Result<()> {
     println!("🔄 Correcting pool activity flags based on weights...");
     match database::check_pools_activity_improved(&db_pool, 30, 10_000.0).await {
         Ok((activated, deactivated)) => {
-            println!("✅ Pool activity flags corrected: {} activated, {} deactivated", activated, deactivated);
+            println!(
+                "✅ Pool activity flags corrected: {} activated, {} deactivated",
+                activated, deactivated
+            );
         }
         Err(e) => {
-            eprintln!("⚠️ Failed to correct pool activity flags: {} (continuing anyway)", e);
+            eprintln!(
+                "⚠️ Failed to correct pool activity flags: {} (continuing anyway)",
+                e
+            );
         }
     }
 
@@ -351,12 +373,20 @@ async fn main() -> Result<()> {
         50,        // top 50 pools
         100_000.0, // min weight: $100K
         Some(flight_recorder_arc.clone()),
-    ).await {
+    )
+    .await
+    {
         Ok(count) => {
-            println!("✅ Initial hot pools refresh completed: {} pools updated", count);
+            println!(
+                "✅ Initial hot pools refresh completed: {} pools updated",
+                count
+            );
         }
         Err(e) => {
-            eprintln!("⚠️ Initial hot pools refresh failed: {} (continuing with existing weights)", e);
+            eprintln!(
+                "⚠️ Initial hot pools refresh failed: {} (continuing with existing weights)",
+                e
+            );
         }
     }
 
@@ -368,12 +398,17 @@ async fn main() -> Result<()> {
         &*graph_service,
         &db_pool,
         rpc_pool.clone(),
-    ).await {
+    )
+    .await
+    {
         Ok(count) => {
             println!("✅ Hot Pool Manager populated with {} pools", count);
         }
         Err(e) => {
-            eprintln!("❌ Failed to populate Hot Pool Manager: {} (continuing anyway)", e);
+            eprintln!(
+                "❌ Failed to populate Hot Pool Manager: {} (continuing anyway)",
+                e
+            );
         }
     }
 
@@ -384,17 +419,22 @@ async fn main() -> Result<()> {
     // 15. Initialize RoutePrecomputer (requires Redis)
     #[cfg(feature = "redis")]
     let route_precomputer: Option<Arc<tokio::sync::Mutex<RoutePrecomputer>>> = {
-        let redis_url = std::env::var("REDIS_URL")
-            .unwrap_or_else(|_| "redis://localhost:6379".to_string());
-        
+        let redis_url =
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
+
         match RoutePrecomputer::new(
             &redis_url,
             db_pool.clone(),
             3600, // cache_ttl_seconds: 1 hour
             pool_validation_cache.clone(),
-        ).await {
+        )
+        .await
+        {
             Ok(mut precomputer) => {
-                println!("✅ RoutePrecomputer initialized (connecting to {})", redis_url);
+                println!(
+                    "✅ RoutePrecomputer initialized (connecting to {})",
+                    redis_url
+                );
                 Some(Arc::new(tokio::sync::Mutex::new(precomputer)))
             }
             Err(e) => {
@@ -413,8 +453,14 @@ async fn main() -> Result<()> {
 
     println!("\n📊 Service Configuration:");
     println!("   Discovery interval: {} seconds", discovery_interval);
-    println!("   Graph update interval: {} seconds", graph_update_interval);
-    println!("   Route pre-computation interval: {} seconds", route_precompute_interval);
+    println!(
+        "   Graph update interval: {} seconds",
+        graph_update_interval
+    );
+    println!(
+        "   Route pre-computation interval: {} seconds",
+        route_precompute_interval
+    );
     println!("\n🔄 Starting background tasks...\n");
 
     // 16. Spawn discovery task
@@ -436,17 +482,17 @@ async fn main() -> Result<()> {
     let hot_pool_manager_clone = Arc::clone(&hot_pool_manager);
     let db_pool_clone = db_pool.clone();
     let rpc_pool_clone = Arc::clone(&rpc_pool);
-    
+
     let graph_update_handle = tokio::spawn(async move {
         let mut interval = interval(Duration::from_secs(graph_update_interval));
         loop {
             interval.tick().await;
             println!("🔄 Updating graph weights...");
-            
+
             match graph_service_clone.calculate_and_update_all_weights().await {
                 Ok(_) => {
                     println!("✅ Graph weights updated");
-                    
+
                     // ✅ Poblar Hot Pool Manager desde BD (usa pesos recién calculados)
                     println!("🔄 Populating Hot Pool Manager from database...");
                     match populate_hot_pool_manager_from_db(
@@ -454,7 +500,9 @@ async fn main() -> Result<()> {
                         &*graph_service_clone,
                         &db_pool_clone,
                         rpc_pool_clone.clone(),
-                    ).await {
+                    )
+                    .await
+                    {
                         Ok(count) => {
                             println!("✅ Hot Pool Manager populated with {} pools", count);
                         }
@@ -465,7 +513,7 @@ async fn main() -> Result<()> {
                 }
                 Err(e) => {
                     eprintln!("❌ Graph weights update failed: {}", e);
-                    
+
                     // ✅ RESILIENCIA: Intentar poblar de todas formas con pesos antiguos
                     println!("⚠️ Attempting to populate Hot Pool Manager with existing weights...");
                     if let Ok(count) = populate_hot_pool_manager_from_db(
@@ -473,8 +521,13 @@ async fn main() -> Result<()> {
                         graph_service_clone.as_ref(),
                         &db_pool_clone,
                         rpc_pool_clone.clone(),
-                    ).await {
-                        println!("✅ Hot Pool Manager populated with {} pools (using stale weights)", count);
+                    )
+                    .await
+                    {
+                        println!(
+                            "✅ Hot Pool Manager populated with {} pools (using stale weights)",
+                            count
+                        );
                     }
                 }
             }
@@ -491,7 +544,7 @@ async fn main() -> Result<()> {
             loop {
                 interval.tick().await;
                 println!("🔄 Pre-computing triangular routes...");
-                
+
                 // Load active pools from database
                 match database::load_active_pools(&db_pool_clone).await {
                     Ok(pools) => {
@@ -499,26 +552,35 @@ async fn main() -> Result<()> {
                             println!("⚠️  No active pools found for route pre-computation");
                             continue;
                         }
-                        
+
                         // Get current block number
-                        let current_block = block_number_cache_clone.get_current_block().await.unwrap_or_else(|_| {
-                            tracing::warn!("BlockNumberCache failed, using 0");
-                            0u64
-                        });
-                        
+                        let current_block = block_number_cache_clone
+                            .get_current_block()
+                            .await
+                            .unwrap_or_else(|_| {
+                                tracing::warn!("BlockNumberCache failed, using 0");
+                                0u64
+                            });
+
                         if current_block == 0 {
                             println!("⚠️  Could not get current block number, skipping route pre-computation");
                             continue;
                         }
-                        
+
                         // Pre-compute top 1000 routes
                         let mut precomputer = route_precomputer_clone.lock().await;
-                        match precomputer.precompute_all_triangular_routes(&pools, current_block, Some(1000)).await {
+                        match precomputer
+                            .precompute_all_triangular_routes(&pools, current_block, Some(1000))
+                            .await
+                        {
                             Ok(count) => println!("✅ Pre-computed {} triangular routes", count),
                             Err(e) => eprintln!("❌ Route pre-computation failed: {}", e),
                         }
                     }
-                    Err(e) => eprintln!("❌ Failed to load active pools for route pre-computation: {}", e),
+                    Err(e) => eprintln!(
+                        "❌ Failed to load active pools for route pre-computation: {}",
+                        e
+                    ),
                 }
             }
         }))
@@ -532,31 +594,37 @@ async fn main() -> Result<()> {
         let db_pool_clone = db_pool.clone();
         let rpc_pool_clone = Arc::clone(&rpc_pool);
         let flight_recorder_clone = Arc::clone(&flight_recorder_arc);
-        
+
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(30 * 60)); // 30 minutes
             let mut consecutive_failures = 0;
-            
+
             loop {
                 interval.tick().await;
                 tracing::info!("🔥 Starting hot pools refresh...");
-                
+
                 match weight_refresher::refresh_hot_pools(
                     graph_service_clone.as_ref(),
                     &db_pool_clone,
                     rpc_pool_clone.clone(),
-                    50,        // top 50 pools
-                    100_000.0, // min weight: $100K
+                    50,                                  // top 50 pools
+                    100_000.0,                           // min weight: $100K
                     Some(flight_recorder_clone.clone()), // ✅ FLIGHT RECORDER: Pasar recorder
-                ).await {
+                )
+                .await
+                {
                     Ok(count) => {
                         consecutive_failures = 0;
                         tracing::info!("✅ Hot pools refresh completed: {} pools updated", count);
                     }
                     Err(e) => {
                         consecutive_failures += 1;
-                        tracing::error!("❌ Hot pools refresh failed (attempt {}/3): {}", consecutive_failures, e);
-                        
+                        tracing::error!(
+                            "❌ Hot pools refresh failed (attempt {}/3): {}",
+                            consecutive_failures,
+                            e
+                        );
+
                         // Backoff: wait 1 hour if 3 consecutive failures
                         if consecutive_failures >= 3 {
                             tracing::warn!("⚠️ Too many failures, waiting 1 hour before retry...");
@@ -575,32 +643,38 @@ async fn main() -> Result<()> {
         let db_pool_clone = db_pool.clone();
         let rpc_pool_clone = Arc::clone(&rpc_pool);
         let flight_recorder_clone = Arc::clone(&flight_recorder_arc);
-        
+
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(60 * 60)); // 1 hour
             let mut consecutive_failures = 0;
-            
+
             loop {
                 interval.tick().await;
                 tracing::info!("🌡️ Starting warm pools refresh...");
-                
+
                 match weight_refresher::refresh_warm_pools(
                     graph_service_clone.as_ref(),
                     &db_pool_clone,
                     rpc_pool_clone.clone(),
-                    10_000.0,  // min weight: $10K
-                    100_000.0, // max weight: $100K
-                    150,       // limit: 150 pools
+                    10_000.0,                            // min weight: $10K
+                    100_000.0,                           // max weight: $100K
+                    150,                                 // limit: 150 pools
                     Some(flight_recorder_clone.clone()), // ✅ FLIGHT RECORDER: Pasar recorder
-                ).await {
+                )
+                .await
+                {
                     Ok(count) => {
                         consecutive_failures = 0;
                         tracing::info!("✅ Warm pools refresh completed: {} pools updated", count);
                     }
                     Err(e) => {
                         consecutive_failures += 1;
-                        tracing::error!("❌ Warm pools refresh failed (attempt {}/3): {}", consecutive_failures, e);
-                        
+                        tracing::error!(
+                            "❌ Warm pools refresh failed (attempt {}/3): {}",
+                            consecutive_failures,
+                            e
+                        );
+
                         if consecutive_failures >= 3 {
                             tracing::warn!("⚠️ Too many failures, waiting 2 hours before retry...");
                             tokio::time::sleep(Duration::from_secs(2 * 60 * 60)).await;
@@ -620,41 +694,45 @@ async fn main() -> Result<()> {
         let rpc_pool_clone = Arc::clone(&rpc_pool);
         // ✅ FLIGHT RECORDER: Full refresh ya está capturado por GraphService::calculate_and_update_all_weights()
         // que registra eventos "graph_updates" con mode="full"
-        
+
         tokio::spawn(async move {
             loop {
                 // Calculate time until next 3 AM UTC
-                use chrono::{Utc, Duration as ChronoDuration};
+                use chrono::{Duration as ChronoDuration, Utc};
                 let now = Utc::now();
-                let mut next_3am = now.date_naive()
-                    .and_hms_opt(3, 0, 0)
-                    .unwrap()
-                    .and_utc();
-                
+                let mut next_3am = now.date_naive().and_hms_opt(3, 0, 0).unwrap().and_utc();
+
                 // If it's already past 3 AM today, schedule for tomorrow
                 if next_3am <= now {
                     next_3am = next_3am + ChronoDuration::days(1);
                 }
-                
-                let sleep_duration = (next_3am - now).to_std()
+
+                let sleep_duration = (next_3am - now)
+                    .to_std()
                     .unwrap_or(Duration::from_secs(24 * 60 * 60));
-                
-                tracing::info!("🌍 Next full refresh scheduled for: {} (in {:?})", next_3am, sleep_duration);
+
+                tracing::info!(
+                    "🌍 Next full refresh scheduled for: {} (in {:?})",
+                    next_3am,
+                    sleep_duration
+                );
                 tokio::time::sleep(sleep_duration).await;
-                
+
                 tracing::info!("🌍 Starting daily full refresh...");
                 // ✅ FLIGHT RECORDER: calculate_and_update_all_weights() ya registra eventos
                 match graph_service_clone.calculate_and_update_all_weights().await {
                     Ok(_) => {
                         tracing::info!("✅ Daily full refresh completed");
-                        
+
                         // Repopulate Hot Pool Manager with fresh weights
                         match populate_hot_pool_manager_from_db(
                             &hot_pool_manager_clone,
                             &*graph_service_clone,
                             &db_pool_clone,
                             rpc_pool_clone.clone(),
-                        ).await {
+                        )
+                        .await
+                        {
                             Ok(count) => {
                                 tracing::info!("✅ Hot Pool Manager repopulated with {} pools after full refresh", count);
                             }
@@ -673,16 +751,25 @@ async fn main() -> Result<()> {
 
     // 22. Wait for shutdown signal
     println!("💡 Service running:");
-    println!("   - Discovery cycles run every {} seconds", discovery_interval);
-    println!("   - Graph weight updates run every {} seconds", graph_update_interval);
+    println!(
+        "   - Discovery cycles run every {} seconds",
+        discovery_interval
+    );
+    println!(
+        "   - Graph weight updates run every {} seconds",
+        graph_update_interval
+    );
     if route_precomputer.is_some() {
-        println!("   - Route pre-computation runs every {} seconds", route_precompute_interval);
+        println!(
+            "   - Route pre-computation runs every {} seconds",
+            route_precompute_interval
+        );
     }
     println!("\nPress Ctrl+C to stop gracefully...\n");
 
     signal::ctrl_c().await?;
     println!("\n🛑 Shutdown signal received, stopping tasks...");
-    
+
     // Cancel all tasks
     discovery_handle.abort();
     graph_update_handle.abort();

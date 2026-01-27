@@ -10,14 +10,14 @@
 //! - **Polling Fallback**: Lazy polling (1s interval) if WebSocket disconnected >5s
 //! - **Integration**: Updates `BlockNumberCache` via `update_from_external()`
 
+use anyhow::{Context, Result};
 use ethers::prelude::*;
 use ethers::providers::{Provider, Ws};
+use futures_util::StreamExt;
+use log::{debug, error, info, warn};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use anyhow::{Result, Context};
 use tokio::time::sleep;
-use futures_util::StreamExt;
-use log::{info, warn, error, debug};
 
 /// WebSocket-based block number updater with automatic reconnection
 pub struct BlockNumberWebSocket {
@@ -67,7 +67,9 @@ impl BlockNumberWebSocket {
 
         tokio::spawn(async move {
             loop {
-                match Self::connect_and_subscribe(&provider_url, cache.clone(), polling_threshold).await {
+                match Self::connect_and_subscribe(&provider_url, cache.clone(), polling_threshold)
+                    .await
+                {
                     Ok(()) => {
                         // Connection successful, reset delay
                         reconnect_delay = Duration::from_secs(1);
@@ -108,13 +110,16 @@ impl BlockNumberWebSocket {
         info!("🔌 [BlockNumberWS] Connecting to WebSocket: {}", ws_url);
 
         // Connect to WebSocket
-        let provider = Provider::<Ws>::connect(&ws_url).await
+        let provider = Provider::<Ws>::connect(&ws_url)
+            .await
             .context("Failed to connect to WebSocket provider")?;
 
         info!("✅ [BlockNumberWS] WebSocket connected, subscribing to newHeads...");
 
         // Subscribe to newHeads using subscribe_blocks
-        let mut stream = provider.subscribe_blocks().await
+        let mut stream = provider
+            .subscribe_blocks()
+            .await
             .context("Failed to subscribe to newHeads")?;
 
         info!("✅ [BlockNumberWS] Subscribed to newHeads");
@@ -133,16 +138,16 @@ impl BlockNumberWebSocket {
                         Some(block) => {
                             if let Some(block_number) = block.number {
                                 let block_u64 = block_number.as_u64();
-                                
+
                                 // Update cache if available
                                 if let Some(ref cache_ref) = cache {
                                     cache_ref.update_from_external(block_u64);
                                 }
-                                
+
                                 last_block_update = Instant::now();
                                 polling_active = false; // Disable polling when WS is active
-                                
-                                debug!("📡 [BlockNumberWS] New block: {} (latency: {:?})", 
+
+                                debug!("📡 [BlockNumberWS] New block: {} (latency: {:?})",
                                       block_u64, last_block_update.elapsed());
                             }
                         }
@@ -152,18 +157,18 @@ impl BlockNumberWebSocket {
                         }
                     }
                 }
-                
+
                 // Polling fallback: check if WebSocket has been silent >5s
                 _ = poll_interval.tick() => {
                     let time_since_last_block = last_block_update.elapsed();
-                    
+
                     if time_since_last_block > polling_threshold && !polling_active {
                         // WebSocket silent >5s, activate polling fallback
                         polling_active = true;
-                        warn!("⚠️ [BlockNumberWS] WebSocket silent for {:?}, activating polling fallback (1s interval)", 
+                        warn!("⚠️ [BlockNumberWS] WebSocket silent for {:?}, activating polling fallback (1s interval)",
                               time_since_last_block);
                     }
-                    
+
                     if polling_active {
                         // Poll every 1 second when fallback is active
                         match provider.get_block_number().await {
@@ -174,7 +179,7 @@ impl BlockNumberWebSocket {
                                 }
                                 last_poll_time = Instant::now();
                                 debug!("🔄 [BlockNumberWS] Polling fallback: block {}", block_u64);
-                                
+
                                 // If we got a block via polling, check if WS is back
                                 if time_since_last_block < polling_threshold {
                                     polling_active = false;
@@ -208,4 +213,3 @@ mod tests {
         assert_eq!(ws.provider_url, http_url);
     }
 }
-

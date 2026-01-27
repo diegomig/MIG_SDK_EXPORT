@@ -1,10 +1,10 @@
+use crate::database::{self, DbPool};
 use crate::{dex_adapter::PoolMeta, metrics};
 use anyhow::Result;
 use dashmap::DashMap;
 use ethers::prelude::Address;
-use std::sync::Arc;
-use crate::database::{self, DbPool};
 use log::debug;
+use std::sync::Arc;
 
 use crate::pools::Pool;
 
@@ -40,7 +40,7 @@ impl CacheManager {
             pool_state_cache_max_size: 1000,
         }
     }
-    
+
     // FASE 4.1: Manual eviction when cache exceeds max size
     pub fn maybe_evict_pool_state(&self) {
         if self.pool_state_cache.len() > self.pool_state_cache_max_size {
@@ -55,7 +55,11 @@ impl CacheManager {
                 removed += 1;
             }
             if removed > 0 {
-                debug!("Evicted {} entries from pool_state_cache (size: {})", removed, self.pool_state_cache.len());
+                debug!(
+                    "Evicted {} entries from pool_state_cache (size: {})",
+                    removed,
+                    self.pool_state_cache.len()
+                );
             }
         }
     }
@@ -83,7 +87,10 @@ impl CacheManager {
     }
 
     pub fn get_active_pools_meta(&self) -> Vec<PoolMeta> {
-        self.pool_meta_cache.iter().map(|entry| entry.value().clone()).collect()
+        self.pool_meta_cache
+            .iter()
+            .map(|entry| entry.value().clone())
+            .collect()
     }
 
     pub async fn record_cache_sizes(&self) {
@@ -92,12 +99,14 @@ impl CacheManager {
         // FASE 4.1: No lock needed for DashMap
         metrics::set_cache_size("pool_state", self.pool_state_cache.len() as f64);
     }
-    
+
     // FASE 4.1: Lock-free get for pool state
     pub fn get_pool_state(&self, address: &Address) -> Option<Pool> {
-        self.pool_state_cache.get(address).map(|e| e.value().clone())
+        self.pool_state_cache
+            .get(address)
+            .map(|e| e.value().clone())
     }
-    
+
     // FASE 4.1: Lock-free insert for pool state with eviction
     pub fn put_pool_state(&self, address: Address, pool: Pool) {
         self.pool_state_cache.insert(address, pool);

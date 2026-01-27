@@ -100,8 +100,14 @@ impl From<&Pool> for PoolMeta {
         let (token0, token1) = match pool {
             Pool::UniswapV2(p) => (p.token0, p.token1),
             Pool::UniswapV3(p) => (p.token0, p.token1),
-            Pool::BalancerWeighted(p) => (p.tokens.get(0).cloned().unwrap_or_default(), p.tokens.get(1).cloned().unwrap_or_default()),
-            Pool::CurveStableSwap(p) => (p.tokens.get(0).cloned().unwrap_or_default(), p.tokens.get(1).cloned().unwrap_or_default()),
+            Pool::BalancerWeighted(p) => (
+                p.tokens.get(0).cloned().unwrap_or_default(),
+                p.tokens.get(1).cloned().unwrap_or_default(),
+            ),
+            Pool::CurveStableSwap(p) => (
+                p.tokens.get(0).cloned().unwrap_or_default(),
+                p.tokens.get(1).cloned().unwrap_or_default(),
+            ),
         };
 
         let fee = match pool {

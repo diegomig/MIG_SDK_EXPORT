@@ -2,20 +2,20 @@
 // Permite que múltiples consumidores procesen el mismo bloque sin duplicar RPC calls
 // ✅ REDIS PUB/SUB: Supports Redis pub/sub for multi-process coordination
 
-use ethers::types::{Block, Transaction};
-use tokio::sync::broadcast;
-use tracing::{error, info, warn, debug};
 use crate::metrics;
 #[cfg(feature = "redis")]
 use crate::redis_manager::RedisManager;
+use ethers::types::{Block, Transaction};
 #[cfg(feature = "redis")]
-use std::sync::Arc;
-#[cfg(feature = "redis")]
-use tokio::sync::Mutex;
+use redis::AsyncCommands;
 #[cfg(feature = "redis")]
 use serde_json;
 #[cfg(feature = "redis")]
-use redis::AsyncCommands;
+use std::sync::Arc;
+use tokio::sync::broadcast;
+#[cfg(feature = "redis")]
+use tokio::sync::Mutex;
+use tracing::{debug, error, info, warn};
 
 /// BlockStream compartido que permite múltiples suscriptores
 /// Usa broadcast channel (in-process) y opcionalmente Redis pub/sub (multi-process)
@@ -39,7 +39,7 @@ impl BlockStream {
     /// `capacity`: número máximo de mensajes en buffer antes de aplicar backpressure
     pub fn new(capacity: usize) -> Self {
         let (sender, _) = broadcast::channel(capacity);
-        Self { 
+        Self {
             sender,
             #[cfg(feature = "redis")]
             redis_manager: None,
@@ -47,7 +47,7 @@ impl BlockStream {
             redis_channel: None,
         }
     }
-    
+
     /// Enable Redis pub/sub for multi-process coordination (requires redis feature)
     #[cfg(feature = "redis")]
     pub fn with_redis(mut self, redis_manager: Arc<Mutex<RedisManager>>, channel: String) -> Self {
@@ -81,14 +81,23 @@ impl BlockStream {
                 metrics::increment_blockstream_blocks_published();
                 metrics::set_blockstream_active_subscribers(count as f64);
                 if count == 0 {
-                    warn!("⚠️ [BlockStream] Published block {} but no active subscribers", block_number);
+                    warn!(
+                        "⚠️ [BlockStream] Published block {} but no active subscribers",
+                        block_number
+                    );
                 } else {
-                    info!("📡 [BlockStream] Published block {} to {} subscribers", block_number, count);
+                    info!(
+                        "📡 [BlockStream] Published block {} to {} subscribers",
+                        block_number, count
+                    );
                 }
                 count
             }
             Err(broadcast::error::SendError(_)) => {
-                warn!("⚠️ [BlockStream] Published block {} but no active subscribers", block_number);
+                warn!(
+                    "⚠️ [BlockStream] Published block {} but no active subscribers",
+                    block_number
+                );
                 metrics::increment_blockstream_blocks_published();
                 metrics::set_blockstream_active_subscribers(0.0);
                 0
@@ -97,7 +106,9 @@ impl BlockStream {
 
         // ✅ REDIS PUB/SUB: Publish to Redis if enabled (for multi-process coordination)
         #[cfg(feature = "redis")]
-        if let (Some(ref redis_manager), Some(ref channel)) = (&self.redis_manager, &self.redis_channel) {
+        if let (Some(ref redis_manager), Some(ref channel)) =
+            (&self.redis_manager, &self.redis_channel)
+        {
             // Publish only block_number to Redis (not full block to save bandwidth)
             let block_message = serde_json::json!({
                 "block_number": block_number,
@@ -107,7 +118,7 @@ impl BlockStream {
                 // Note: Redis pub/sub would need a method on RedisManager
                 // For now, skip Redis pub/sub to avoid compilation errors
                 // TODO: Add publish method to RedisManager if needed
-                debug!("📡 [BlockStream] Would publish block {} to Redis channel {} (not yet implemented)", 
+                debug!("📡 [BlockStream] Would publish block {} to Redis channel {} (not yet implemented)",
                        block_number, channel);
             }
         }
@@ -141,7 +152,12 @@ mod tests {
     fn create_test_block(number: u64) -> Block<Transaction> {
         Block {
             number: Some(U64::from(number)),
-            hash: Some(H256::from_str("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef").unwrap()),
+            hash: Some(
+                H256::from_str(
+                    "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                )
+                .unwrap(),
+            ),
             transactions: vec![],
             ..Default::default()
         }
@@ -177,19 +193,20 @@ mod tests {
         for i in 1..=3 {
             let block = create_test_block(i);
             stream.publish(block).await.unwrap();
-            
+
             // Intentar recibir con timeout para evitar bloqueo infinito
-            let data = tokio::time::timeout(
-                tokio::time::Duration::from_millis(100),
-                receiver.recv()
-            ).await;
-            
+            let data =
+                tokio::time::timeout(tokio::time::Duration::from_millis(100), receiver.recv())
+                    .await;
+
             // Con capacidad pequeña, algunos mensajes pueden perderse
             // pero al menos deberíamos recibir algunos
             if i == 1 {
                 // El primer mensaje siempre debería llegar
-                assert!(data.is_ok() && data.unwrap().is_ok(), 
-                    "First block should always be received");
+                assert!(
+                    data.is_ok() && data.unwrap().is_ok(),
+                    "First block should always be received"
+                );
             }
         }
     }
@@ -205,4 +222,3 @@ mod tests {
         assert_eq!(count, 0);
     }
 }
-

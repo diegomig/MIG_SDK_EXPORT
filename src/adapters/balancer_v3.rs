@@ -1,14 +1,14 @@
+use anyhow::Result;
 use async_trait::async_trait;
 use ethers::prelude::*;
-use anyhow::Result;
+use log::{debug, info, warn};
 use std::sync::Arc;
-use log::{info, warn, debug};
 use tokio::time::{sleep, Duration};
 
-use crate::dex_adapter::{DexAdapter, PoolMeta};
-use crate::pools::{Pool, BalancerWeightedPool};
-use crate::multicall::{Multicall, Call};
 use crate::contracts::{i_balancer_v2_vault::PoolRegisteredFilter, IBalancerV2Vault};
+use crate::dex_adapter::{DexAdapter, PoolMeta};
+use crate::multicall::{Call, Multicall};
+use crate::pools::{BalancerWeightedPool, Pool};
 use crate::rpc_pool::RpcPool;
 
 abigen!(
@@ -47,8 +47,16 @@ pub struct BalancerV3Adapter {
 }
 
 impl BalancerV3Adapter {
-    pub fn new(rpc_pool: Arc<RpcPool>, multicall_address: Address, multicall_batch_size: usize) -> Self {
-        Self { rpc_pool, multicall_address, multicall_batch_size }
+    pub fn new(
+        rpc_pool: Arc<RpcPool>,
+        multicall_address: Address,
+        multicall_batch_size: usize,
+    ) -> Self {
+        Self {
+            rpc_pool,
+            multicall_address,
+            multicall_batch_size,
+        }
     }
 }
 
@@ -65,7 +73,10 @@ impl DexAdapter for BalancerV3Adapter {
         chunk_size: u64,
         _max_concurrency: usize,
     ) -> Result<Vec<PoolMeta>> {
-        info!("🔍 Discovering Balancer V3 pools from block {} to {}", from_block, to_block);
+        info!(
+            "🔍 Discovering Balancer V3 pools from block {} to {}",
+            from_block, to_block
+        );
         let vault_address: Address = BALANCER_VAULT_ADDRESS.parse()?;
 
         let block_chunks = crate::utils::create_block_chunks(from_block, to_block, chunk_size);
@@ -78,7 +89,7 @@ impl DexAdapter for BalancerV3Adapter {
                     let (provider, _permit) = self_clone.rpc_pool.get_next_provider().await?;
                     let vault_contract = IBalancerV2Vault::new(vault_address, Arc::clone(&provider));
                     let event = vault_contract.event::<PoolRegisteredFilter>();
-                    
+
                     debug!("Querying Balancer V3 PoolRegistered events from block {} to {}", start, end);
                     match event.from_block(start).to_block(end).query().await {
                         Ok(logs) => return Ok(logs),
@@ -106,7 +117,7 @@ impl DexAdapter for BalancerV3Adapter {
         for future in futures_iter {
             // Add delay between chunks to avoid rate limits
             tokio::time::sleep(Duration::from_millis(500)).await;
-            
+
             match future.await {
                 Ok(chunk_result) => results.push(chunk_result),
                 Err(e) => {
@@ -117,33 +128,52 @@ impl DexAdapter for BalancerV3Adapter {
         }
 
         let all_logs: Vec<PoolRegisteredFilter> = results.into_iter().flatten().collect();
-        info!("📊 Found {} PoolRegistered events for Balancer V3", all_logs.len());
+        info!(
+            "📊 Found {} PoolRegistered events for Balancer V3",
+            all_logs.len()
+        );
 
-        let mut pools_meta: Vec<PoolMeta> = all_logs.into_iter().map(|log| PoolMeta {
-            address: log.pool_address,
-            factory: Some(vault_address),
-            pool_id: Some(log.pool_id),
-            fee: None,
-            token0: Address::zero(),
-            token1: Address::zero(),
-            dex: self.name(),
-            pool_type: Some("V3".to_string()),
-        }).collect();
+        let mut pools_meta: Vec<PoolMeta> = all_logs
+            .into_iter()
+            .map(|log| PoolMeta {
+                address: log.pool_address,
+                factory: Some(vault_address),
+                pool_id: Some(log.pool_id),
+                fee: None,
+                token0: Address::zero(),
+                token1: Address::zero(),
+                dex: self.name(),
+                pool_type: Some("V3".to_string()),
+            })
+            .collect();
 
         // Fetch pool tokens using Vault's getPoolTokens
         let (token_results, provider) = {
             let mut attempts = 0;
             loop {
                 let (provider, _permit) = self.rpc_pool.get_next_provider().await?;
-                let multicall = Multicall::new(provider.clone(), self.multicall_address, self.multicall_batch_size);
+                let multicall = Multicall::new(
+                    provider.clone(),
+                    self.multicall_address,
+                    self.multicall_batch_size,
+                );
                 let vault_contract = IBalancerV2Vault::new(vault_address, provider.clone());
 
-                let calls: Vec<_> = pools_meta.iter().filter_map(|pool| {
-                    pool.pool_id.map(|id| {
-                        let call_data = vault_contract.get_pool_tokens(id.into()).calldata().unwrap();
-                        Call { target: vault_address, call_data }
+                let calls: Vec<_> = pools_meta
+                    .iter()
+                    .filter_map(|pool| {
+                        pool.pool_id.map(|id| {
+                            let call_data = vault_contract
+                                .get_pool_tokens(id.into())
+                                .calldata()
+                                .unwrap();
+                            Call {
+                                target: vault_address,
+                                call_data,
+                            }
+                        })
                     })
-                }).collect();
+                    .collect();
 
                 if calls.is_empty() {
                     warn!("⚠️  No pools to fetch tokens for");
@@ -154,14 +184,21 @@ impl DexAdapter for BalancerV3Adapter {
                     Ok(results) => break (results, provider),
                     Err(e) => {
                         let error_string = e.to_string().to_lowercase();
-                        if error_string.contains("429") || error_string.contains("too many requests") || error_string.contains("limit exceeded") {
+                        if error_string.contains("429")
+                            || error_string.contains("too many requests")
+                            || error_string.contains("limit exceeded")
+                        {
                             self.rpc_pool.report_rate_limit_error(&provider);
                         } else {
                             self.rpc_pool.mark_as_unhealthy(&provider);
                         }
                         attempts += 1;
                         if attempts >= MAX_RETRIES {
-                            return Err(anyhow::anyhow!("Failed to get pool tokens after {} attempts: {}", attempts, e));
+                            return Err(anyhow::anyhow!(
+                                "Failed to get pool tokens after {} attempts: {}",
+                                attempts,
+                                e
+                            ));
                         }
                         warn!("Get pool tokens for {} failed, retrying in {:?}. Attempt {}/{}. Error: {}", self.name(), RETRY_DELAY, attempts, MAX_RETRIES, e);
                         sleep(RETRY_DELAY).await;
@@ -169,10 +206,10 @@ impl DexAdapter for BalancerV3Adapter {
                 }
             }
         };
-        
+
         let vault_contract = IBalancerV2Vault::new(vault_address, provider.clone());
         let get_pool_tokens_fn = vault_contract.abi().function("getPoolTokens")?;
-        
+
         for (i, pool) in pools_meta.iter_mut().enumerate() {
             if let Some(result_data) = token_results.get(i) {
                 if let Ok(decoded) = get_pool_tokens_fn.decode_output(result_data) {
@@ -182,7 +219,11 @@ impl DexAdapter for BalancerV3Adapter {
                             pool.token1 = tokens[1].clone().into_address().unwrap_or_default();
                             debug!("✅ Pool {} has {} tokens", pool.address, tokens.len());
                         } else {
-                            debug!("⚠️  Pool {} has only {} token(s)", pool.address, tokens.len());
+                            debug!(
+                                "⚠️  Pool {} has only {} token(s)",
+                                pool.address,
+                                tokens.len()
+                            );
                         }
                     }
                 }
@@ -191,7 +232,10 @@ impl DexAdapter for BalancerV3Adapter {
 
         // Filter out pools without valid tokens
         pools_meta.retain(|p| p.token0 != Address::zero() && p.token1 != Address::zero());
-        info!("✅ Discovered {} valid Balancer V3 pools with tokens", pools_meta.len());
+        info!(
+            "✅ Discovered {} valid Balancer V3 pools with tokens",
+            pools_meta.len()
+        );
 
         Ok(pools_meta)
     }
@@ -202,11 +246,15 @@ impl DexAdapter for BalancerV3Adapter {
         }
 
         info!("🔄 Fetching state for {} Balancer V3 pools", pools.len());
-        
+
         let mut attempts = 0;
         loop {
             let (provider, _permit) = self.rpc_pool.get_next_provider().await?;
-            let multicall = Multicall::new(Arc::clone(&provider), self.multicall_address, self.multicall_batch_size);
+            let multicall = Multicall::new(
+                Arc::clone(&provider),
+                self.multicall_address,
+                self.multicall_batch_size,
+            );
             let vault_address: Address = BALANCER_VAULT_ADDRESS.parse()?;
             let vault_contract = IBalancerV2Vault::new(vault_address, Arc::clone(&provider));
 
@@ -218,17 +266,31 @@ impl DexAdapter for BalancerV3Adapter {
             for pool_meta in pools {
                 if let Some(pool_id) = pool_meta.pool_id {
                     // Call 1: getPoolTokens
-                    let call_data = vault_contract.get_pool_tokens(pool_id.into()).calldata().unwrap();
-                    calls.push(Call { target: vault_address, call_data });
+                    let call_data = vault_contract
+                        .get_pool_tokens(pool_id.into())
+                        .calldata()
+                        .unwrap();
+                    calls.push(Call {
+                        target: vault_address,
+                        call_data,
+                    });
 
                     // Call 2 & 3: Pool-specific calls
-                    let pool_contract = IBalancerV3Pool::new(pool_meta.address, Arc::clone(&provider));
-                    
-                    let weights_calldata = pool_contract.get_normalized_weights().calldata().unwrap();
-                    calls.push(Call { target: pool_meta.address, call_data: weights_calldata });
+                    let pool_contract =
+                        IBalancerV3Pool::new(pool_meta.address, Arc::clone(&provider));
+
+                    let weights_calldata =
+                        pool_contract.get_normalized_weights().calldata().unwrap();
+                    calls.push(Call {
+                        target: pool_meta.address,
+                        call_data: weights_calldata,
+                    });
 
                     let fee_calldata = pool_contract.get_swap_fee_percentage().calldata().unwrap();
-                    calls.push(Call { target: pool_meta.address, call_data: fee_calldata });
+                    calls.push(Call {
+                        target: pool_meta.address,
+                        call_data: fee_calldata,
+                    });
                 }
             }
 
@@ -246,58 +308,90 @@ impl DexAdapter for BalancerV3Adapter {
 
                     let mut fetched_pools = Vec::new();
                     let mut result_index = 0;
-                    
+
                     for pool_meta in pools {
                         if pool_meta.pool_id.is_some() {
-                            if let (Some(pool_tokens_data), Some(weights_data), Some(fee_data)) =
-                                (results.get(result_index), results.get(result_index + 1), results.get(result_index + 2)) {
-                                
-                                if let (Ok(tokens_decoded), Ok(weights_decoded), Ok(fee_decoded)) =
-                                    (get_pool_tokens_fn.decode_output(pool_tokens_data), 
-                                     get_weights_fn.decode_output(weights_data), 
-                                     get_fee_fn.decode_output(fee_data)) {
-                                    
-                                    if let (Some(tokens_array), Some(balances_array), Some(weights_array), Some(swap_fee)) =
-                                        (tokens_decoded[0].clone().into_array(), 
-                                         tokens_decoded[1].clone().into_array(), 
-                                         weights_decoded[0].clone().into_array(), 
-                                         fee_decoded[0].clone().into_uint()) {
+                            if let (Some(pool_tokens_data), Some(weights_data), Some(fee_data)) = (
+                                results.get(result_index),
+                                results.get(result_index + 1),
+                                results.get(result_index + 2),
+                            ) {
+                                if let (Ok(tokens_decoded), Ok(weights_decoded), Ok(fee_decoded)) = (
+                                    get_pool_tokens_fn.decode_output(pool_tokens_data),
+                                    get_weights_fn.decode_output(weights_data),
+                                    get_fee_fn.decode_output(fee_data),
+                                ) {
+                                    if let (
+                                        Some(tokens_array),
+                                        Some(balances_array),
+                                        Some(weights_array),
+                                        Some(swap_fee),
+                                    ) = (
+                                        tokens_decoded[0].clone().into_array(),
+                                        tokens_decoded[1].clone().into_array(),
+                                        weights_decoded[0].clone().into_array(),
+                                        fee_decoded[0].clone().into_uint(),
+                                    ) {
+                                        let tokens = tokens_array
+                                            .into_iter()
+                                            .filter_map(|t| t.into_address())
+                                            .collect();
+                                        let balances = balances_array
+                                            .into_iter()
+                                            .filter_map(|t| t.into_uint())
+                                            .collect();
+                                        let weights = weights_array
+                                            .into_iter()
+                                            .filter_map(|t| t.into_uint())
+                                            .collect();
 
-                                        let tokens = tokens_array.into_iter().filter_map(|t| t.into_address()).collect();
-                                        let balances = balances_array.into_iter().filter_map(|t| t.into_uint()).collect();
-                                        let weights = weights_array.into_iter().filter_map(|t| t.into_uint()).collect();
+                                        fetched_pools.push(Pool::BalancerWeighted(
+                                            BalancerWeightedPool {
+                                                address: pool_meta.address,
+                                                pool_id: pool_meta.pool_id.unwrap(),
+                                                tokens,
+                                                balances,
+                                                weights,
+                                                swap_fee,
+                                                dex: pool_meta.dex,
+                                            },
+                                        ));
 
-                                        fetched_pools.push(Pool::BalancerWeighted(BalancerWeightedPool {
-                                            address: pool_meta.address,
-                                            pool_id: pool_meta.pool_id.unwrap(),
-                                            tokens,
-                                            balances,
-                                            weights,
-                                            swap_fee,
-                                            dex: pool_meta.dex,
-                                        }));
-                                        
-                                        debug!("✅ Fetched state for Balancer V3 pool {}", pool_meta.address);
+                                        debug!(
+                                            "✅ Fetched state for Balancer V3 pool {}",
+                                            pool_meta.address
+                                        );
                                     }
                                 }
                             }
                             result_index += 3; // Move to next pool's results
                         }
                     }
-                    
-                    info!("✅ Successfully fetched state for {} Balancer V3 pools", fetched_pools.len());
+
+                    info!(
+                        "✅ Successfully fetched state for {} Balancer V3 pools",
+                        fetched_pools.len()
+                    );
                     return Ok(fetched_pools);
-                },
+                }
                 Err(e) => {
                     let error_string = e.to_string().to_lowercase();
-                    if error_string.contains("429") || error_string.contains("too many requests") || error_string.contains("limit exceeded") {
+                    if error_string.contains("429")
+                        || error_string.contains("too many requests")
+                        || error_string.contains("limit exceeded")
+                    {
                         self.rpc_pool.report_rate_limit_error(&provider);
                     } else {
                         self.rpc_pool.mark_as_unhealthy(&provider);
                     }
                     attempts += 1;
                     if attempts >= MAX_RETRIES {
-                        return Err(anyhow::anyhow!("Failed to fetch pool state for {} after {} attempts: {}", self.name(), attempts, e));
+                        return Err(anyhow::anyhow!(
+                            "Failed to fetch pool state for {} after {} attempts: {}",
+                            self.name(),
+                            attempts,
+                            e
+                        ));
                     }
                     warn!("Fetch pool state for {} failed, retrying in {:?}. Attempt {}/{}. Error: {}", self.name(), RETRY_DELAY, attempts, MAX_RETRIES, e);
                     sleep(RETRY_DELAY).await;
@@ -306,4 +400,3 @@ impl DexAdapter for BalancerV3Adapter {
         }
     }
 }
-

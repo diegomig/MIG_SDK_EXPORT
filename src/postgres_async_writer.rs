@@ -1,11 +1,11 @@
 // Async PostgreSQL writer to avoid blocking fast-path with DB operations
-use tokio::sync::mpsc;
-use tokio::time::{Duration, interval};
-use sqlx::PgPool;
 use anyhow::Result;
-use log::{info, error};
-use serde::{Serialize, Deserialize};
 use ethers::types::{Address, U256};
+use log::{error, info};
+use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
+use tokio::sync::mpsc;
+use tokio::time::{interval, Duration};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DbOperation {
@@ -64,7 +64,7 @@ pub struct PoolSnapshot {
     pub liquidity: Option<u128>,
     pub tick: Option<i32>,
     pub block_number: u64,
-    pub     timestamp: i64,
+    pub timestamp: i64,
 }
 
 pub struct PostgresAsyncWriter {
@@ -77,57 +77,119 @@ pub struct PostgresAsyncWriter {
 impl PostgresAsyncWriter {
     pub fn new(db_pool: PgPool, batch_size: usize, flush_interval: Duration) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
-        
+
         let writer = Self {
             db_pool: db_pool.clone(),
             operation_tx: tx,
             batch_size,
             flush_interval,
         };
-        
+
         // Spawn background writer task
         tokio::spawn(Self::writer_task(db_pool, rx, batch_size, flush_interval));
-        
+
         writer
     }
 
     /// Send operation to background writer (non-blocking)
     pub fn send_operation(&self, operation: DbOperation) -> Result<()> {
-        self.operation_tx.send(operation)
-            .map_err(|_| anyhow::anyhow!("Failed to send DB operation - writer task may have died"))?;
+        self.operation_tx.send(operation).map_err(|_| {
+            anyhow::anyhow!("Failed to send DB operation - writer task may have died")
+        })?;
         Ok(())
     }
 
     /// Convenience methods for common operations
-    pub fn upsert_pool(&self, address: Address, dex: String, token0: Address, token1: Address, fee_bps: Option<u32>, is_active: bool, last_seen_block: u64) -> Result<()> {
+    pub fn upsert_pool(
+        &self,
+        address: Address,
+        dex: String,
+        token0: Address,
+        token1: Address,
+        fee_bps: Option<u32>,
+        is_active: bool,
+        last_seen_block: u64,
+    ) -> Result<()> {
         self.send_operation(DbOperation::UpsertPool {
-            address, dex, token0, token1, fee_bps, is_active, last_seen_block,
+            address,
+            dex,
+            token0,
+            token1,
+            fee_bps,
+            is_active,
+            last_seen_block,
             is_valid: true, // Default to valid for new pools
-            factory: None, // Will be set from PoolMeta if needed
+            factory: None,  // Will be set from PoolMeta if needed
         })
     }
-    
+
     /// Upsert pool with full metadata (for compatibility with database::upsert_pool)
-    pub fn upsert_pool_full(&self, address: Address, dex: String, token0: Address, token1: Address, fee_bps: Option<u32>, is_active: bool, last_seen_block: u64, is_valid: bool, factory: Option<Address>) -> Result<()> {
+    pub fn upsert_pool_full(
+        &self,
+        address: Address,
+        dex: String,
+        token0: Address,
+        token1: Address,
+        fee_bps: Option<u32>,
+        is_active: bool,
+        last_seen_block: u64,
+        is_valid: bool,
+        factory: Option<Address>,
+    ) -> Result<()> {
         self.send_operation(DbOperation::UpsertPool {
-            address, dex, token0, token1, fee_bps, is_active, last_seen_block, is_valid, factory
+            address,
+            dex,
+            token0,
+            token1,
+            fee_bps,
+            is_active,
+            last_seen_block,
+            is_valid,
+            factory,
         })
     }
 
-    pub fn update_pool_state(&self, address: Address, reserve0: Option<U256>, reserve1: Option<U256>, sqrt_price_x96: Option<U256>, liquidity: Option<u128>, tick: Option<i32>, block_number: u64) -> Result<()> {
+    pub fn update_pool_state(
+        &self,
+        address: Address,
+        reserve0: Option<U256>,
+        reserve1: Option<U256>,
+        sqrt_price_x96: Option<U256>,
+        liquidity: Option<u128>,
+        tick: Option<i32>,
+        block_number: u64,
+    ) -> Result<()> {
         self.send_operation(DbOperation::UpdatePoolState {
-            address, reserve0, reserve1, sqrt_price_x96, liquidity, tick, block_number
+            address,
+            reserve0,
+            reserve1,
+            sqrt_price_x96,
+            liquidity,
+            tick,
+            block_number,
         })
     }
 
-    pub fn upsert_graph_weight(&self, pool_address: Address, weight: f64, volume_24h: f64, liquidity_usd: f64) -> Result<()> {
+    pub fn upsert_graph_weight(
+        &self,
+        pool_address: Address,
+        weight: f64,
+        volume_24h: f64,
+        liquidity_usd: f64,
+    ) -> Result<()> {
         self.send_operation(DbOperation::UpsertGraphWeight {
-            pool_address, weight, volume_24h, liquidity_usd
+            pool_address,
+            weight,
+            volume_24h,
+            liquidity_usd,
         })
     }
 
     pub fn set_dex_state(&self, dex: String, last_processed_block: u64) -> Result<()> {
-        self.send_operation(DbOperation::SetDexState { dex, last_processed_block })
+        self.send_operation(DbOperation::SetDexState {
+            dex,
+            last_processed_block,
+        })
     }
 
     /// ✅ FASE 1.3: Checkpoint DEX state (atomic transaction for last_processed_block)
@@ -166,9 +228,12 @@ impl PostgresAsyncWriter {
     ) {
         let mut batch = Vec::with_capacity(batch_size);
         let mut flush_timer = interval(flush_interval);
-        
-        info!("PostgreSQL async writer started (batch_size: {}, flush_interval: {:?})", batch_size, flush_interval);
-        
+
+        info!(
+            "PostgreSQL async writer started (batch_size: {}, flush_interval: {:?})",
+            batch_size, flush_interval
+        );
+
         loop {
             tokio::select! {
                 // Receive new operation
@@ -176,7 +241,7 @@ impl PostgresAsyncWriter {
                     match operation {
                         Some(op) => {
                             batch.push(op);
-                            
+
                             // Flush if batch is full
                             if batch.len() >= batch_size {
                                 Self::flush_batch(&db_pool, &mut batch).await;
@@ -192,7 +257,7 @@ impl PostgresAsyncWriter {
                         }
                     }
                 }
-                
+
                 // Periodic flush
                 _ = flush_timer.tick() => {
                     if !batch.is_empty() {
@@ -209,7 +274,7 @@ impl PostgresAsyncWriter {
         }
 
         let start = std::time::Instant::now();
-        
+
         // Group operations by type for efficient batch processing
         let mut pool_upserts = Vec::new();
         let mut state_updates = Vec::new();
@@ -217,28 +282,74 @@ impl PostgresAsyncWriter {
         let mut dex_states = Vec::new();
         let mut snapshots = Vec::new();
         let mut pool_activities = Vec::new();
-        
+
         let mut checkpoints = Vec::new();
-        
+
         for op in batch.drain(..) {
             match op {
-                DbOperation::UpsertPool { address, dex, token0, token1, fee_bps, is_active, last_seen_block, is_valid, factory } => {
-                    pool_upserts.push((address, dex, token0, token1, fee_bps, is_active, last_seen_block, is_valid, factory));
+                DbOperation::UpsertPool {
+                    address,
+                    dex,
+                    token0,
+                    token1,
+                    fee_bps,
+                    is_active,
+                    last_seen_block,
+                    is_valid,
+                    factory,
+                } => {
+                    pool_upserts.push((
+                        address,
+                        dex,
+                        token0,
+                        token1,
+                        fee_bps,
+                        is_active,
+                        last_seen_block,
+                        is_valid,
+                        factory,
+                    ));
                 }
-                DbOperation::UpdatePoolState { address, reserve0, reserve1, sqrt_price_x96, liquidity, tick, block_number } => {
-                    state_updates.push((address, reserve0, reserve1, sqrt_price_x96, liquidity, tick, block_number));
+                DbOperation::UpdatePoolState {
+                    address,
+                    reserve0,
+                    reserve1,
+                    sqrt_price_x96,
+                    liquidity,
+                    tick,
+                    block_number,
+                } => {
+                    state_updates.push((
+                        address,
+                        reserve0,
+                        reserve1,
+                        sqrt_price_x96,
+                        liquidity,
+                        tick,
+                        block_number,
+                    ));
                 }
-                DbOperation::UpsertGraphWeight { pool_address, weight, volume_24h, liquidity_usd } => {
+                DbOperation::UpsertGraphWeight {
+                    pool_address,
+                    weight,
+                    volume_24h,
+                    liquidity_usd,
+                } => {
                     weight_updates.push((pool_address, weight, volume_24h, liquidity_usd));
                 }
-                DbOperation::SetDexState { dex, last_processed_block } => {
+                DbOperation::SetDexState {
+                    dex,
+                    last_processed_block,
+                } => {
                     dex_states.push((dex, last_processed_block));
                 }
                 DbOperation::CheckpointDexState { dex, block_number } => {
                     // ✅ FASE 1.3: Checkpoints are processed separately in atomic transactions
                     checkpoints.push((dex, block_number));
                 }
-                DbOperation::BatchPoolSnapshot { snapshots: batch_snapshots } => {
+                DbOperation::BatchPoolSnapshot {
+                    snapshots: batch_snapshots,
+                } => {
                     snapshots.extend(batch_snapshots);
                 }
                 DbOperation::SetPoolActivity { address, is_active } => {
@@ -252,7 +363,7 @@ impl PostgresAsyncWriter {
 
         // Execute batched operations
         let mut operations_completed = 0;
-        
+
         if !pool_upserts.is_empty() {
             let pool_count = pool_upserts.len();
             if let Err(e) = Self::batch_upsert_pools(db_pool, pool_upserts).await {
@@ -261,7 +372,7 @@ impl PostgresAsyncWriter {
                 operations_completed += pool_count;
             }
         }
-        
+
         if !state_updates.is_empty() {
             let state_count = state_updates.len();
             if let Err(e) = Self::batch_update_states(db_pool, state_updates).await {
@@ -270,7 +381,7 @@ impl PostgresAsyncWriter {
                 operations_completed += state_count;
             }
         }
-        
+
         if !weight_updates.is_empty() {
             let weight_count = weight_updates.len();
             if let Err(e) = Self::batch_update_weights(db_pool, weight_updates).await {
@@ -279,7 +390,7 @@ impl PostgresAsyncWriter {
                 operations_completed += weight_count;
             }
         }
-        
+
         for (dex, block) in dex_states {
             if let Err(e) = Self::update_dex_state(db_pool, &dex, block).await {
                 error!("Failed to update dex state for {}: {}", dex, e);
@@ -287,17 +398,23 @@ impl PostgresAsyncWriter {
                 operations_completed += 1;
             }
         }
-        
+
         // ✅ FASE 1.3: Process checkpoints in separate atomic transactions
         for (dex, block_number) in checkpoints {
             if let Err(e) = Self::checkpoint_dex_state_internal(db_pool, &dex, block_number).await {
-                error!("Failed to checkpoint dex state for {} at block {}: {}", dex, block_number, e);
+                error!(
+                    "Failed to checkpoint dex state for {} at block {}: {}",
+                    dex, block_number, e
+                );
             } else {
                 operations_completed += 1;
-                info!("✅ FASE 1.3: Checkpointed {} at block {}", dex, block_number);
+                info!(
+                    "✅ FASE 1.3: Checkpointed {} at block {}",
+                    dex, block_number
+                );
             }
         }
-        
+
         if !snapshots.is_empty() {
             let snapshot_count = snapshots.len();
             if let Err(e) = Self::batch_insert_snapshots(db_pool, snapshots).await {
@@ -306,7 +423,7 @@ impl PostgresAsyncWriter {
                 operations_completed += snapshot_count;
             }
         }
-        
+
         if !pool_activities.is_empty() {
             let activity_count = pool_activities.len();
             if let Err(e) = Self::batch_set_pool_activity_internal(db_pool, pool_activities).await {
@@ -315,26 +432,50 @@ impl PostgresAsyncWriter {
                 operations_completed += activity_count;
             }
         }
-        
+
         let duration = start.elapsed();
-        info!("Flushed {} operations in {:?} ({} ops/sec)", 
-              operations_completed, duration, 
-              operations_completed as f64 / duration.as_secs_f64());
-        
+        info!(
+            "Flushed {} operations in {:?} ({} ops/sec)",
+            operations_completed,
+            duration,
+            operations_completed as f64 / duration.as_secs_f64()
+        );
+
         crate::metrics::record_db_batch_duration(duration);
         crate::metrics::record_db_batch_size(operations_completed);
     }
 
     async fn batch_upsert_pools(
         db_pool: &PgPool,
-        pools: Vec<(Address, String, Address, Address, Option<u32>, bool, u64, bool, Option<Address>)>,
+        pools: Vec<(
+            Address,
+            String,
+            Address,
+            Address,
+            Option<u32>,
+            bool,
+            u64,
+            bool,
+            Option<Address>,
+        )>,
     ) -> Result<()> {
         use crate::database::SCHEMA;
         use chrono::Utc;
         // Use PostgreSQL batch insert matching database::upsert_pool signature
         let mut tx = db_pool.begin().await?;
-        
-        for (address, dex, token0, token1, fee_bps, is_active, last_seen_block, is_valid, factory) in pools {
+
+        for (
+            address,
+            dex,
+            token0,
+            token1,
+            fee_bps,
+            is_active,
+            last_seen_block,
+            is_valid,
+            factory,
+        ) in pools
+        {
             let address_str = format!("{:?}", address);
             let token0_str = format!("{:?}", token0);
             let token1_str = format!("{:?}", token1);
@@ -343,7 +484,7 @@ impl PostgresAsyncWriter {
             let now = Utc::now();
             let bytecode_hash_str: Option<String> = None;
             let init_code_hash_str: Option<String> = None;
-            
+
             sqlx::query(
                 &format!(
                     "INSERT INTO {}.pools (address, dex, origin_dex, factory, token0, token1, fee_bps, created_block, is_valid, is_active, last_seen_block, updated_at, bytecode_hash, init_code_hash)
@@ -378,20 +519,28 @@ impl PostgresAsyncWriter {
             .bind(&init_code_hash_str)
             .execute(&mut *tx).await?;
         }
-        
+
         tx.commit().await?;
         Ok(())
     }
 
     async fn batch_update_states(
         db_pool: &PgPool,
-        states: Vec<(Address, Option<U256>, Option<U256>, Option<U256>, Option<u128>, Option<i32>, u64)>,
+        states: Vec<(
+            Address,
+            Option<U256>,
+            Option<U256>,
+            Option<U256>,
+            Option<u128>,
+            Option<i32>,
+            u64,
+        )>,
     ) -> Result<()> {
         let mut tx = db_pool.begin().await?;
-        
+
         for (address, reserve0, reserve1, sqrt_price_x96, liquidity, tick, block_number) in states {
             sqlx::query(
-                "INSERT INTO pool_state_snapshots 
+                "INSERT INTO pool_state_snapshots
                  (pool_address, reserve0, reserve1, sqrt_price_x96, liquidity, tick, block_number, timestamp)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, EXTRACT(EPOCH FROM NOW()))"
             )
@@ -404,7 +553,7 @@ impl PostgresAsyncWriter {
             .bind(block_number as i64)
             .execute(&mut *tx).await?;
         }
-        
+
         tx.commit().await?;
         Ok(())
     }
@@ -414,7 +563,7 @@ impl PostgresAsyncWriter {
         weights: Vec<(Address, f64, f64, f64)>,
     ) -> Result<()> {
         let mut tx = db_pool.begin().await?;
-        
+
         for (pool_address, weight, volume_24h, liquidity_usd) in weights {
             sqlx::query(
                 "INSERT INTO graph_weights (pool_address, weight, volume_24h, liquidity_usd, updated_at)
@@ -431,52 +580,62 @@ impl PostgresAsyncWriter {
             .bind(liquidity_usd)
             .execute(&mut *tx).await?;
         }
-        
+
         tx.commit().await?;
         Ok(())
     }
 
-    async fn update_dex_state(db_pool: &PgPool, dex: &str, last_processed_block: u64) -> Result<()> {
+    async fn update_dex_state(
+        db_pool: &PgPool,
+        dex: &str,
+        last_processed_block: u64,
+    ) -> Result<()> {
         sqlx::query(
             "INSERT INTO dex_state (dex, last_processed_block, updated_at)
              VALUES ($1, $2, EXTRACT(EPOCH FROM NOW()))
              ON CONFLICT (dex) DO UPDATE SET
              last_processed_block = EXCLUDED.last_processed_block,
-             updated_at = EXCLUDED.updated_at"
+             updated_at = EXCLUDED.updated_at",
         )
         .bind(dex)
         .bind(last_processed_block as i64)
-        .execute(db_pool).await?;
-        
+        .execute(db_pool)
+        .await?;
+
         Ok(())
     }
 
     /// ✅ FASE 1.3: Checkpoint DEX state in atomic transaction
     /// This ensures progress is persisted safely every 100 blocks
-    async fn checkpoint_dex_state_internal(db_pool: &PgPool, dex: &str, block_number: u64) -> Result<()> {
+    async fn checkpoint_dex_state_internal(
+        db_pool: &PgPool,
+        dex: &str,
+        block_number: u64,
+    ) -> Result<()> {
         let mut tx = db_pool.begin().await?;
-        
+
         sqlx::query(
             "INSERT INTO dex_state (dex, last_processed_block, updated_at)
              VALUES ($1, $2, EXTRACT(EPOCH FROM NOW()))
              ON CONFLICT (dex) DO UPDATE SET
              last_processed_block = EXCLUDED.last_processed_block,
-             updated_at = EXCLUDED.updated_at"
+             updated_at = EXCLUDED.updated_at",
         )
         .bind(dex)
         .bind(block_number as i64)
-        .execute(&mut *tx).await?;
-        
+        .execute(&mut *tx)
+        .await?;
+
         tx.commit().await?;
         Ok(())
     }
 
     async fn batch_insert_snapshots(db_pool: &PgPool, snapshots: Vec<PoolSnapshot>) -> Result<()> {
         let mut tx = db_pool.begin().await?;
-        
+
         for snapshot in snapshots {
             sqlx::query(
-                "INSERT INTO pool_state_snapshots 
+                "INSERT INTO pool_state_snapshots
                  (pool_address, reserve0, reserve1, sqrt_price_x96, liquidity, tick, block_number, timestamp)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
             )
@@ -490,15 +649,18 @@ impl PostgresAsyncWriter {
             .bind(snapshot.timestamp)
             .execute(&mut *tx).await?;
         }
-        
+
         tx.commit().await?;
         Ok(())
     }
 
-    async fn batch_set_pool_activity_internal(db_pool: &PgPool, activities: Vec<(Address, bool)>) -> Result<()> {
+    async fn batch_set_pool_activity_internal(
+        db_pool: &PgPool,
+        activities: Vec<(Address, bool)>,
+    ) -> Result<()> {
         use crate::database::SCHEMA;
         let mut tx = db_pool.begin().await?;
-        
+
         for (address, is_active) in activities {
             let address_str = format!("{:?}", address);
             sqlx::query(
@@ -508,7 +670,7 @@ impl PostgresAsyncWriter {
             .bind(&address_str)
             .execute(&mut *tx).await?;
         }
-        
+
         tx.commit().await?;
         Ok(())
     }
@@ -528,7 +690,7 @@ impl PostgresAsyncWriter {
 mod tests {
     use super::*;
     use ethers::types::Address;
-    
+
     #[tokio::test]
     async fn test_async_writer_creation() {
         // This test would require a real PostgreSQL connection
@@ -542,7 +704,7 @@ mod tests {
             is_active: true,
             last_seen_block: 1000,
         };
-        
+
         // Verify operation can be serialized
         let _json = serde_json::to_string(&operation).unwrap();
     }

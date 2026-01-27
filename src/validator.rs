@@ -13,17 +13,19 @@
 //
 // See `docs/VALIDATION.md` for detailed validation criteria.
 
+use crate::flight_recorder::FlightRecorder;
+use crate::{
+    dex_adapter::PoolMeta, metrics, rpc_pool::RpcPool, settings::Validator as ValidatorSettings,
+};
+use crate::{record_decision, record_phase_end, record_phase_start};
 use anyhow::Result;
 use ethers::prelude::*;
+use log::warn;
 use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::Arc;
-use log::warn;
-use tokio::time::{sleep, Duration};
-use crate::{dex_adapter::PoolMeta, metrics, rpc_pool::RpcPool, settings::Validator as ValidatorSettings};
-use crate::flight_recorder::FlightRecorder;
-use crate::{record_phase_start, record_phase_end, record_decision};
 use std::time::Instant;
+use tokio::time::{sleep, Duration};
 
 const MAX_RETRIES: u32 = 10;
 const RETRY_DELAY: Duration = Duration::from_secs(5);
@@ -155,7 +157,7 @@ impl PoolValidator {
             flight_recorder: None,
         }
     }
-    
+
     /// Sets the flight recorder for instrumentation and debugging.
     ///
     /// # Parameters
@@ -194,7 +196,9 @@ impl PoolValidator {
 
             match &result {
                 ValidationResult::Valid => metrics::increment_pool_validations("valid", "none"),
-                ValidationResult::Invalid(reason) => metrics::increment_pool_validations("invalid", reason.as_str()),
+                ValidationResult::Invalid(reason) => {
+                    metrics::increment_pool_validations("invalid", reason.as_str())
+                }
             }
 
             results.push((pool, result));
@@ -231,43 +235,73 @@ impl PoolValidator {
     /// to handle transient RPC failures.
     pub async fn structural_validation(&self, pool: &PoolMeta) -> Result<ValidationResult> {
         let start_time = Instant::now();
-        
+
         // ✅ FLIGHT RECORDER: Registrar inicio de validación
         if let Some(ref recorder) = self.flight_recorder {
-            record_phase_start!(recorder, "pool_validator_structural", serde_json::json!({
-                "pool_address": format!("{:?}", pool.address),
-                "token0": format!("{:?}", pool.token0),
-                "token1": format!("{:?}", pool.token1)
-            }));
+            record_phase_start!(
+                recorder,
+                "pool_validator_structural",
+                serde_json::json!({
+                    "pool_address": format!("{:?}", pool.address),
+                    "token0": format!("{:?}", pool.token0),
+                    "token1": format!("{:?}", pool.token1)
+                })
+            );
         }
-        
+
         // Token blacklist check
-        if self.blacklisted_tokens.contains(&pool.token0) || self.blacklisted_tokens.contains(&pool.token1) {
+        if self.blacklisted_tokens.contains(&pool.token0)
+            || self.blacklisted_tokens.contains(&pool.token1)
+        {
             let result = ValidationResult::Invalid(InvalidReason::BlacklistedToken);
             if let Some(ref recorder) = self.flight_recorder {
-                record_decision!(recorder, "pool_validator", "reject", "blacklisted_token", serde_json::json!({
-                    "pool_address": format!("{:?}", pool.address)
-                }));
-                record_phase_end!(recorder, "pool_validator_structural", start_time, serde_json::json!({
-                    "result": "invalid",
-                    "reason": "blacklisted_token"
-                }));
+                record_decision!(
+                    recorder,
+                    "pool_validator",
+                    "reject",
+                    "blacklisted_token",
+                    serde_json::json!({
+                        "pool_address": format!("{:?}", pool.address)
+                    })
+                );
+                record_phase_end!(
+                    recorder,
+                    "pool_validator_structural",
+                    start_time,
+                    serde_json::json!({
+                        "result": "invalid",
+                        "reason": "blacklisted_token"
+                    })
+                );
             }
             return Ok(result);
         }
 
         // Anchor token check (now optional)
         if self.settings.require_anchor_token {
-            if !self.anchor_tokens.contains(&pool.token0) && !self.anchor_tokens.contains(&pool.token1) {
+            if !self.anchor_tokens.contains(&pool.token0)
+                && !self.anchor_tokens.contains(&pool.token1)
+            {
                 let result = ValidationResult::Invalid(InvalidReason::NoAnchorToken);
                 if let Some(ref recorder) = self.flight_recorder {
-                    record_decision!(recorder, "pool_validator", "reject", "no_anchor_token", serde_json::json!({
-                        "pool_address": format!("{:?}", pool.address)
-                    }));
-                    record_phase_end!(recorder, "pool_validator_structural", start_time, serde_json::json!({
-                        "result": "invalid",
-                        "reason": "no_anchor_token"
-                    }));
+                    record_decision!(
+                        recorder,
+                        "pool_validator",
+                        "reject",
+                        "no_anchor_token",
+                        serde_json::json!({
+                            "pool_address": format!("{:?}", pool.address)
+                        })
+                    );
+                    record_phase_end!(
+                        recorder,
+                        "pool_validator_structural",
+                        start_time,
+                        serde_json::json!({
+                            "result": "invalid",
+                            "reason": "no_anchor_token"
+                        })
+                    );
                 }
                 return Ok(result);
             }
@@ -277,26 +311,48 @@ impl PoolValidator {
         if pool.token0.is_zero() || pool.token1.is_zero() {
             let result = ValidationResult::Invalid(InvalidReason::ZeroAddress);
             if let Some(ref recorder) = self.flight_recorder {
-                record_decision!(recorder, "pool_validator", "reject", "zero_address", serde_json::json!({
-                    "pool_address": format!("{:?}", pool.address)
-                }));
-                record_phase_end!(recorder, "pool_validator_structural", start_time, serde_json::json!({
-                    "result": "invalid",
-                    "reason": "zero_address"
-                }));
+                record_decision!(
+                    recorder,
+                    "pool_validator",
+                    "reject",
+                    "zero_address",
+                    serde_json::json!({
+                        "pool_address": format!("{:?}", pool.address)
+                    })
+                );
+                record_phase_end!(
+                    recorder,
+                    "pool_validator_structural",
+                    start_time,
+                    serde_json::json!({
+                        "result": "invalid",
+                        "reason": "zero_address"
+                    })
+                );
             }
             return Ok(result);
         }
         if pool.token0 == pool.token1 {
             let result = ValidationResult::Invalid(InvalidReason::SameTokens);
             if let Some(ref recorder) = self.flight_recorder {
-                record_decision!(recorder, "pool_validator", "reject", "same_tokens", serde_json::json!({
-                    "pool_address": format!("{:?}", pool.address)
-                }));
-                record_phase_end!(recorder, "pool_validator_structural", start_time, serde_json::json!({
-                    "result": "invalid",
-                    "reason": "same_tokens"
-                }));
+                record_decision!(
+                    recorder,
+                    "pool_validator",
+                    "reject",
+                    "same_tokens",
+                    serde_json::json!({
+                        "pool_address": format!("{:?}", pool.address)
+                    })
+                );
+                record_phase_end!(
+                    recorder,
+                    "pool_validator_structural",
+                    start_time,
+                    serde_json::json!({
+                        "result": "invalid",
+                        "reason": "same_tokens"
+                    })
+                );
             }
             return Ok(result);
         }
@@ -305,14 +361,25 @@ impl PoolValidator {
         if let Some(factory_address) = pool.factory {
             if self.whitelisted_factories.contains(&factory_address) {
                 if let Some(ref recorder) = self.flight_recorder {
-                    record_decision!(recorder, "pool_validator", "accept", "factory_whitelisted", serde_json::json!({
-                        "pool_address": format!("{:?}", pool.address),
-                        "factory": format!("{:?}", factory_address)
-                    }));
-                    record_phase_end!(recorder, "pool_validator_structural", start_time, serde_json::json!({
-                        "result": "valid",
-                        "method": "factory_whitelist"
-                    }));
+                    record_decision!(
+                        recorder,
+                        "pool_validator",
+                        "accept",
+                        "factory_whitelisted",
+                        serde_json::json!({
+                            "pool_address": format!("{:?}", pool.address),
+                            "factory": format!("{:?}", factory_address)
+                        })
+                    );
+                    record_phase_end!(
+                        recorder,
+                        "pool_validator_structural",
+                        start_time,
+                        serde_json::json!({
+                            "result": "valid",
+                            "method": "factory_whitelist"
+                        })
+                    );
                 }
                 return Ok(ValidationResult::Valid);
             }
@@ -323,80 +390,137 @@ impl PoolValidator {
         loop {
             let bytecode_start = Instant::now();
             let (provider, _permit) = self.rpc_pool.get_next_provider().await?;
-            
+
             match provider.get_code(pool.address, None).await {
                 Ok(bytecode) => {
                     if bytecode.is_empty() {
                         let result = ValidationResult::Invalid(InvalidReason::NoBytecode);
                         if let Some(ref recorder) = self.flight_recorder {
-                            record_decision!(recorder, "pool_validator", "reject", "no_bytecode", serde_json::json!({
-                                "pool_address": format!("{:?}", pool.address),
-                                "attempts": attempts + 1
-                            }));
-                            record_phase_end!(recorder, "pool_validator_structural", start_time, serde_json::json!({
-                                "result": "invalid",
-                                "reason": "no_bytecode",
-                                "attempts": attempts + 1
-                            }));
+                            record_decision!(
+                                recorder,
+                                "pool_validator",
+                                "reject",
+                                "no_bytecode",
+                                serde_json::json!({
+                                    "pool_address": format!("{:?}", pool.address),
+                                    "attempts": attempts + 1
+                                })
+                            );
+                            record_phase_end!(
+                                recorder,
+                                "pool_validator_structural",
+                                start_time,
+                                serde_json::json!({
+                                    "result": "invalid",
+                                    "reason": "no_bytecode",
+                                    "attempts": attempts + 1
+                                })
+                            );
                         }
                         return Ok(result);
                     }
                     let code_hash = ethers::utils::keccak256(&bytecode);
-                    if !self.whitelisted_bytecode_hashes.contains(&H256::from(code_hash)) {
+                    if !self
+                        .whitelisted_bytecode_hashes
+                        .contains(&H256::from(code_hash))
+                    {
                         let result = ValidationResult::Invalid(InvalidReason::BytecodeMismatch);
                         if let Some(ref recorder) = self.flight_recorder {
-                            record_decision!(recorder, "pool_validator", "reject", "bytecode_mismatch", serde_json::json!({
-                                "pool_address": format!("{:?}", pool.address),
-                                "attempts": attempts + 1
-                            }));
-                            record_phase_end!(recorder, "pool_validator_structural", start_time, serde_json::json!({
-                                "result": "invalid",
-                                "reason": "bytecode_mismatch",
-                                "attempts": attempts + 1
-                            }));
+                            record_decision!(
+                                recorder,
+                                "pool_validator",
+                                "reject",
+                                "bytecode_mismatch",
+                                serde_json::json!({
+                                    "pool_address": format!("{:?}", pool.address),
+                                    "attempts": attempts + 1
+                                })
+                            );
+                            record_phase_end!(
+                                recorder,
+                                "pool_validator_structural",
+                                start_time,
+                                serde_json::json!({
+                                    "result": "invalid",
+                                    "reason": "bytecode_mismatch",
+                                    "attempts": attempts + 1
+                                })
+                            );
                         }
                         return Ok(result);
                     }
                     // Valid by bytecode
                     if let Some(ref recorder) = self.flight_recorder {
-                        record_decision!(recorder, "pool_validator", "accept", "bytecode_whitelisted", serde_json::json!({
-                            "pool_address": format!("{:?}", pool.address),
-                            "attempts": attempts + 1,
-                            "bytecode_fetch_ms": bytecode_start.elapsed().as_millis()
-                        }));
-                        record_phase_end!(recorder, "pool_validator_structural", start_time, serde_json::json!({
-                            "result": "valid",
-                            "method": "bytecode_whitelist",
-                            "attempts": attempts + 1
-                        }));
+                        record_decision!(
+                            recorder,
+                            "pool_validator",
+                            "accept",
+                            "bytecode_whitelisted",
+                            serde_json::json!({
+                                "pool_address": format!("{:?}", pool.address),
+                                "attempts": attempts + 1,
+                                "bytecode_fetch_ms": bytecode_start.elapsed().as_millis()
+                            })
+                        );
+                        record_phase_end!(
+                            recorder,
+                            "pool_validator_structural",
+                            start_time,
+                            serde_json::json!({
+                                "result": "valid",
+                                "method": "bytecode_whitelist",
+                                "attempts": attempts + 1
+                            })
+                        );
                     }
                     return Ok(ValidationResult::Valid);
-                },
+                }
                 Err(e) => {
                     let error_string = e.to_string().to_lowercase();
-                    if error_string.contains("429") || error_string.contains("too many requests") || error_string.contains("limit exceeded") {
+                    if error_string.contains("429")
+                        || error_string.contains("too many requests")
+                        || error_string.contains("limit exceeded")
+                    {
                         self.rpc_pool.report_rate_limit_error(&provider);
                     } else {
                         self.rpc_pool.mark_as_unhealthy(&provider);
                     }
-                    
+
                     attempts += 1;
                     if attempts >= MAX_RETRIES {
                         if let Some(ref recorder) = self.flight_recorder {
-                            record_decision!(recorder, "pool_validator", "error", "max_retries_exceeded", serde_json::json!({
-                                "pool_address": format!("{:?}", pool.address),
-                                "attempts": attempts,
-                                "error": format!("{}", e)
-                            }));
-                            record_phase_end!(recorder, "pool_validator_structural", start_time, serde_json::json!({
-                                "result": "error",
-                                "reason": "max_retries_exceeded",
-                                "attempts": attempts
-                            }));
+                            record_decision!(
+                                recorder,
+                                "pool_validator",
+                                "error",
+                                "max_retries_exceeded",
+                                serde_json::json!({
+                                    "pool_address": format!("{:?}", pool.address),
+                                    "attempts": attempts,
+                                    "error": format!("{}", e)
+                                })
+                            );
+                            record_phase_end!(
+                                recorder,
+                                "pool_validator_structural",
+                                start_time,
+                                serde_json::json!({
+                                    "result": "error",
+                                    "reason": "max_retries_exceeded",
+                                    "attempts": attempts
+                                })
+                            );
                         }
-                        return Err(anyhow::anyhow!("Failed to validate pool bytecode after {} attempts: {}", attempts, e));
+                        return Err(anyhow::anyhow!(
+                            "Failed to validate pool bytecode after {} attempts: {}",
+                            attempts,
+                            e
+                        ));
                     }
-                    warn!("Pool validation failed, retrying in {:?}. Attempt {}/{}. Error: {}", RETRY_DELAY, attempts, MAX_RETRIES, e);
+                    warn!(
+                        "Pool validation failed, retrying in {:?}. Attempt {}/{}. Error: {}",
+                        RETRY_DELAY, attempts, MAX_RETRIES, e
+                    );
                     sleep(RETRY_DELAY).await;
                 }
             }

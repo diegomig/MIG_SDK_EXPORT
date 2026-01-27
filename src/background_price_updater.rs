@@ -1,13 +1,13 @@
 // routegen-rs/src/background_price_updater.rs
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicU32, Ordering};
-use tokio::time::{interval, Duration, Instant};
-use ethers::prelude::*;
-use dashmap::DashMap;
-use std::collections::HashMap;
-use log::{info, warn, error};
 use anyhow::Result;
+use dashmap::DashMap;
+use ethers::prelude::*;
+use log::{error, info, warn};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::Arc;
+use tokio::time::{interval, Duration, Instant};
 
 /// Cache compartido con metadata de freshness
 #[derive(Clone)]
@@ -40,7 +40,7 @@ impl SharedPriceCache {
             consecutive_failures: Arc::new(AtomicU32::new(0)),
         }
     }
-    
+
     /// Lee precio con metadata de freshness
     pub fn get_price_with_metadata(&self, token: &Address) -> Option<(f64, Duration, PriceSource)> {
         self.prices.get(token).map(|entry| {
@@ -48,21 +48,21 @@ impl SharedPriceCache {
             (entry.price, age, entry.source)
         })
     }
-    
+
     /// Lee precio simple (para hot path)
     pub fn get_price(&self, token: &Address) -> Option<f64> {
         self.prices.get(token).map(|entry| entry.price)
     }
-    
+
     /// Obtiene múltiples precios con información de freshness
     pub fn get_prices_batch(&self, tokens: &[Address]) -> (HashMap<Address, f64>, CacheStats) {
         let mut result = HashMap::new();
         let mut stats = CacheStats::default();
-        
+
         for token in tokens {
             if let Some((price, age, source)) = self.get_price_with_metadata(token) {
                 result.insert(*token, price);
-                
+
                 // Clasificar por freshness
                 if age < Duration::from_secs(5) {
                     stats.fresh += 1;
@@ -71,7 +71,7 @@ impl SharedPriceCache {
                 } else {
                     stats.stale += 1;
                 }
-                
+
                 // Clasificar por source
                 match source {
                     PriceSource::Chainlink => stats.from_chainlink += 1,
@@ -83,41 +83,47 @@ impl SharedPriceCache {
                 stats.missing += 1;
             }
         }
-        
+
         (result, stats)
     }
-    
+
     pub fn update_batch(&self, prices: HashMap<Address, f64>, source: PriceSource) {
         let now = Instant::now();
         for (token, price) in prices {
-            self.prices.insert(token, PriceEntry {
-                price,
-                updated_at: now,
-                source,
-            });
+            self.prices.insert(
+                token,
+                PriceEntry {
+                    price,
+                    updated_at: now,
+                    source,
+                },
+            );
         }
     }
-    
+
     /// ✅ SPRINT ESTABILIZACIÓN: Set precio individual (para emergency fetch)
     pub fn set_price(&self, token: Address, price: f64, block: u64) {
-        self.prices.insert(token, PriceEntry {
-            price,
-            updated_at: Instant::now(),
-            source: PriceSource::Chainlink, // Asumir Chainlink para emergency fetch
-        });
+        self.prices.insert(
+            token,
+            PriceEntry {
+                price,
+                updated_at: Instant::now(),
+                source: PriceSource::Chainlink, // Asumir Chainlink para emergency fetch
+            },
+        );
         // Actualizar last_successful_update si es necesario
         self.last_successful_update.store(block, Ordering::Relaxed);
     }
-    
+
     pub fn is_healthy(&self) -> bool {
         let failures = self.consecutive_failures.load(Ordering::Relaxed);
         let last_update = self.last_successful_update.load(Ordering::Relaxed);
-        
+
         // Si nunca hubo actualización exitosa, no está healthy
         if last_update == 0 {
             return failures < 3; // Si tiene <3 fallos, aún puede estar inicializando
         }
-        
+
         // Calcular edad de última actualización
         // last_update es un timestamp en segundos desde algún epoch
         // Por simplicidad, asumimos que si last_update > 0, fue actualizado recientemente
@@ -126,13 +132,13 @@ impl SharedPriceCache {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        
+
         let age = now.saturating_sub(last_update);
-        
+
         // Healthy si: <3 fallos consecutivos Y última actualización <60s
         failures < 3 && age < 60
     }
-    
+
     pub fn mark_success(&self) {
         self.consecutive_failures.store(0, Ordering::Relaxed);
         let now = std::time::SystemTime::now()
@@ -141,7 +147,7 @@ impl SharedPriceCache {
             .as_secs();
         self.last_successful_update.store(now, Ordering::Relaxed);
     }
-    
+
     pub fn mark_failure(&self) {
         self.consecutive_failures.fetch_add(1, Ordering::Relaxed);
     }
@@ -167,7 +173,10 @@ pub struct BackgroundPriceUpdater<M: Middleware> {
     update_interval: Duration,
 }
 
-impl<M: Middleware> BackgroundPriceUpdater<M> where M: 'static {
+impl<M: Middleware> BackgroundPriceUpdater<M>
+where
+    M: 'static,
+{
     pub fn new(
         cache: SharedPriceCache,
         chainlink_feed: Arc<crate::price_feeds::PriceFeed<M>>,
@@ -204,13 +213,13 @@ impl<M: Middleware> BackgroundPriceUpdater<M> where M: 'static {
         guard.dedup();
         guard.len().saturating_sub(before)
     }
-    
+
     pub async fn start(self: Arc<Self>) {
         info!("🚀 Starting background price updater");
         let token_count = self.tokens_to_track.read().await.len();
         info!("   Tokens: {}", token_count);
         info!("   Interval: {:?}", self.update_interval);
-        
+
         // Warm-up inicial
         info!("🔥 Initial warm-up...");
         match self.update_prices_with_fallback().await {
@@ -224,14 +233,14 @@ impl<M: Middleware> BackgroundPriceUpdater<M> where M: 'static {
                 self.cache.mark_failure();
             }
         }
-        
+
         let mut ticker = interval(self.update_interval);
         let mut iteration = 0u64;
-        
+
         loop {
             ticker.tick().await;
             iteration += 1;
-            
+
             match self.update_prices_with_fallback().await {
                 Ok(stats) => {
                     info!("✅ [Background #{}] {}", iteration, stats);
@@ -240,14 +249,12 @@ impl<M: Middleware> BackgroundPriceUpdater<M> where M: 'static {
                 Err(e) => {
                     self.cache.mark_failure();
                     let failures = self.cache.consecutive_failures.load(Ordering::Relaxed);
-                    
+
                     error!(
                         "❌ [Background #{}] Update failed (consecutive failures: {}): {}",
-                        iteration,
-                        failures,
-                        e
+                        iteration, failures, e
                     );
-                    
+
                     if failures >= 3 {
                         error!("🚨 Background updater is unhealthy! Cache may be stale.");
                     }
@@ -255,7 +262,7 @@ impl<M: Middleware> BackgroundPriceUpdater<M> where M: 'static {
             }
         }
     }
-    
+
     async fn update_prices_with_fallback(&self) -> Result<UpdateStats> {
         let start = Instant::now();
         let mut stats = UpdateStats::default();
@@ -263,12 +270,12 @@ impl<M: Middleware> BackgroundPriceUpdater<M> where M: 'static {
         if tokens_to_track.is_empty() {
             return Ok(stats);
         }
-        
+
         // ✅ OPTIMIZACIÓN: Consultar SharedPriceCache PRIMERO para evitar llamadas innecesarias
         let mut prices = HashMap::new();
         let mut tokens_still_needed = Vec::new();
         let mut cache_hits = 0;
-        
+
         for &token in &tokens_to_track {
             if let Some(price) = self.cache.get_price(&token) {
                 if price > 0.0 {
@@ -281,11 +288,14 @@ impl<M: Middleware> BackgroundPriceUpdater<M> where M: 'static {
                 tokens_still_needed.push(token);
             }
         }
-        
+
         if cache_hits > 0 {
-            info!("  📊 SharedPriceCache provided {} prices (skipping fetch for these tokens)", cache_hits);
+            info!(
+                "  📊 SharedPriceCache provided {} prices (skipping fetch for these tokens)",
+                cache_hits
+            );
         }
-        
+
         // 1. Intentar Chainlink (primario) con timeout razonable solo para tokens que faltan
         if tokens_still_needed.is_empty() {
             // Todos los precios ya están en cache, no necesitamos hacer llamadas
@@ -297,9 +307,15 @@ impl<M: Middleware> BackgroundPriceUpdater<M> where M: 'static {
                 self.chainlink_feed
                     // Background can wait longer without increasing RPC/CU, and avoids "missing=1" forever.
                     // ✅ Pasar SharedPriceCache para que pueda usar anchor tokens y ejecutar pool fallback en paralelo
-                    .get_usd_prices_batch_with_chainlink_timeout_and_cache(&tokens_still_needed, None, Duration::from_millis(1500), Some(&self.cache))
-            ).await;
-        
+                    .get_usd_prices_batch_with_chainlink_timeout_and_cache(
+                        &tokens_still_needed,
+                        None,
+                        Duration::from_millis(1500),
+                        Some(&self.cache),
+                    ),
+            )
+            .await;
+
             match chainlink_result {
                 Ok(Ok(chainlink_prices)) => {
                     stats.chainlink_success = true;
@@ -316,38 +332,46 @@ impl<M: Middleware> BackgroundPriceUpdater<M> where M: 'static {
                 }
             }
         }
-        
+
         // 2. Para tokens sin precio, intentar pool fallback
-        let missing: Vec<_> = tokens_still_needed.iter()
+        let missing: Vec<_> = tokens_still_needed
+            .iter()
             .filter(|t| !prices.contains_key(t))
             .copied()
             .collect();
-        
+
         if !missing.is_empty() {
             // Usar el pool fallback existente de PriceFeed
             // El método fetch_from_twap_fallback ya está implementado y usa known_prices
             // Necesitamos pasarle los precios conocidos (de Chainlink o cache)
             let known_prices: HashMap<Address, f64> = prices.clone();
-            
+
             // Intentar pool fallback con timeout razonable
             match tokio::time::timeout(
                 Duration::from_millis(1000), // 1s para pool fallback (puede tardar ~500ms)
-                self.fetch_pool_prices(&missing, &known_prices)
-            ).await {
+                self.fetch_pool_prices(&missing, &known_prices),
+            )
+            .await
+            {
                 Ok(Ok(pool_prices)) => {
                     // ✅ FILTRAR precios inválidos antes de agregarlos
                     // Precios deben estar entre $0.0001 y $1,000,000 (rango razonable para tokens)
                     let original_count = pool_prices.len();
                     let valid_pool_prices: HashMap<Address, f64> = pool_prices
                         .into_iter()
-                        .filter(|(_, price)| *price > 0.0 && *price >= 0.0001 && *price <= 1_000_000.0)
+                        .filter(|(_, price)| {
+                            *price > 0.0 && *price >= 0.0001 && *price <= 1_000_000.0
+                        })
                         .collect();
-                    
+
                     let filtered_count = original_count - valid_pool_prices.len();
                     if filtered_count > 0 {
-                        warn!("⚠️ Pool fallback: Filtered {} invalid prices (out of range)", filtered_count);
+                        warn!(
+                            "⚠️ Pool fallback: Filtered {} invalid prices (out of range)",
+                            filtered_count
+                        );
                     }
-                    
+
                     stats.pool_count = valid_pool_prices.len();
                     prices.extend(valid_pool_prices);
                 }
@@ -359,19 +383,20 @@ impl<M: Middleware> BackgroundPriceUpdater<M> where M: 'static {
                 }
             }
         }
-        
+
         // 3. Hardcoded fallback para stablecoins (último recurso)
-        let still_missing: Vec<_> = tokens_to_track.iter()
+        let still_missing: Vec<_> = tokens_to_track
+            .iter()
             .filter(|t| !prices.contains_key(t))
             .copied()
             .collect();
-        
+
         if !still_missing.is_empty() {
             let hardcoded = self.get_hardcoded_prices(&still_missing);
             stats.hardcoded_count = hardcoded.len();
             prices.extend(hardcoded);
         }
-        
+
         // 4. Actualizar cache
         let total_count = prices.len();
         if !prices.is_empty() {
@@ -382,16 +407,16 @@ impl<M: Middleware> BackgroundPriceUpdater<M> where M: 'static {
             } else {
                 PriceSource::Hardcoded
             };
-            
+
             self.cache.update_batch(prices, source);
         }
-        
+
         stats.total_count = total_count;
         stats.duration = start.elapsed();
-        
+
         Ok(stats)
     }
-    
+
     /// Helper para obtener precios desde pools usando el método existente
     async fn fetch_pool_prices(
         &self,
@@ -399,9 +424,11 @@ impl<M: Middleware> BackgroundPriceUpdater<M> where M: 'static {
         known_prices: &HashMap<Address, f64>,
     ) -> Result<HashMap<Address, f64>> {
         // Usar el método público fetch_from_twap_fallback de PriceFeed
-        self.chainlink_feed.fetch_from_twap_fallback(tokens, None, known_prices).await
+        self.chainlink_feed
+            .fetch_from_twap_fallback(tokens, None, known_prices)
+            .await
     }
-    
+
     fn get_hardcoded_prices(&self, tokens: &[Address]) -> HashMap<Address, f64> {
         // Hardcoded SOLO para stablecoins
         // Nota: `.unwrap()` está prohibido fuera de tests (ver `docs/code_conventions.md`).
@@ -416,14 +443,16 @@ impl<M: Middleware> BackgroundPriceUpdater<M> where M: 'static {
             }
         }
 
-        let usdc_native = parse_addr_or_zero("USDC_NATIVE", "0xaf88d065e77c8cC2239327C5EDb3A432268e5831");
+        let usdc_native =
+            parse_addr_or_zero("USDC_NATIVE", "0xaf88d065e77c8cC2239327C5EDb3A432268e5831");
         // Correct USDC.e on Arbitrum One:
         let usdc_e = parse_addr_or_zero("USDC_E", "0xFF970A61A04b1Ca14834A43f5de4533eBDDB5CC8");
         // Alias histórico encontrado en pools/DB (mantener para hardcoded = 1.0)
-        let usdc_legacy = parse_addr_or_zero("USDC_LEGACY", "0xFF970A61A04b1Ca14834A43f5dE4533eBDDB5CC8");
+        let usdc_legacy =
+            parse_addr_or_zero("USDC_LEGACY", "0xFF970A61A04b1Ca14834A43f5dE4533eBDDB5CC8");
         let usdt = parse_addr_or_zero("USDT", "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9");
         let dai = parse_addr_or_zero("DAI", "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1");
-        
+
         let mut prices = HashMap::new();
         for token in tokens {
             let price = match *token {
@@ -431,10 +460,13 @@ impl<M: Middleware> BackgroundPriceUpdater<M> where M: 'static {
                     || addr == usdc_e
                     || addr == usdc_legacy
                     || addr == usdt
-                    || addr == dai => Some(1.0),
+                    || addr == dai =>
+                {
+                    Some(1.0)
+                }
                 _ => None,
             };
-            
+
             if let Some(p) = price {
                 prices.insert(*token, p);
             }
@@ -467,4 +499,3 @@ impl std::fmt::Display for UpdateStats {
         )
     }
 }
-

@@ -11,12 +11,12 @@
 //! - Tests unitarios para cada conversión
 //! - Metadatos de origen en todas las structs
 
-use std::collections::HashMap;
+use anyhow::{anyhow, Context, Result};
 use ethers::prelude::*;
-use anyhow::{Result, anyhow, Context};
-use tracing::{debug, warn, error, instrument};
 use log::info;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use tracing::{debug, error, instrument, warn};
 
 /// 🎯 TIPOS DE FUENTES DE DATOS
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -104,7 +104,9 @@ pub fn parse_hex_to_u256(raw_hex: &str) -> Result<ConversionResult<U256>> {
 
             // Validar que no sea un valor obviamente inválido
             if value == U256::zero() {
-                result.validation_errors.push("U256 value is zero".to_string());
+                result
+                    .validation_errors
+                    .push("U256 value is zero".to_string());
                 result.is_valid = false;
             }
 
@@ -114,7 +116,9 @@ pub fn parse_hex_to_u256(raw_hex: &str) -> Result<ConversionResult<U256>> {
         Err(e) => {
             error!(error = ?e, "Failed to parse hex to U256");
             let mut metadata = metadata;
-            metadata.parsing_errors.push(format!("Hex parsing error: {}", e));
+            metadata
+                .parsing_errors
+                .push(format!("Hex parsing error: {}", e));
 
             Ok(ConversionResult {
                 data: U256::zero(),
@@ -150,7 +154,9 @@ pub fn parse_address_to_h160(raw_address: &str) -> Result<ConversionResult<Addre
 
             // Validar que no sea zero address
             if address == Address::zero() {
-                result.validation_errors.push("Address is zero address".to_string());
+                result
+                    .validation_errors
+                    .push("Address is zero address".to_string());
                 result.is_valid = false;
             }
 
@@ -160,7 +166,9 @@ pub fn parse_address_to_h160(raw_address: &str) -> Result<ConversionResult<Addre
         Err(e) => {
             error!(error = ?e, "Failed to parse address");
             let mut metadata = metadata;
-            metadata.parsing_errors.push(format!("Address parsing error: {}", e));
+            metadata
+                .parsing_errors
+                .push(format!("Address parsing error: {}", e));
 
             Ok(ConversionResult {
                 data: Address::zero(),
@@ -182,14 +190,18 @@ pub fn u256_to_f64_with_decimals(value: U256, decimals: u8) -> Result<f64> {
     let divisor = 10u128.pow(decimals as u32);
 
     // Usar f64 para la conversión
-    let value_f64 = value_str.parse::<f64>()
+    let value_f64 = value_str
+        .parse::<f64>()
         .context("Failed to convert U256 string to f64")?;
 
     let result = value_f64 / divisor as f64;
 
     // Validar que no sea NaN o infinito
     if !result.is_finite() {
-        return Err(anyhow!("Conversion resulted in non-finite value: {}", result));
+        return Err(anyhow!(
+            "Conversion resulted in non-finite value: {}",
+            result
+        ));
     }
 
     debug!(result = result, "U256 to f64 conversion complete");
@@ -256,7 +268,10 @@ impl DataConvertible for NormalizedV2Reserves {
             source,
             timestamp_ms: current_timestamp_ms(),
             block_number: None,
-            raw_input: Some(format!("reserve0={}, reserve1={}", reserve0_hex, reserve1_hex)),
+            raw_input: Some(format!(
+                "reserve0={}, reserve1={}",
+                reserve0_hex, reserve1_hex
+            )),
             parsing_errors,
         };
 
@@ -333,7 +348,8 @@ impl DataConvertible for NormalizedV3Slot0 {
             Ok(t) => {
                 // Validar rango de tick V3
                 if t < -887272 || t > 887272 {
-                    validation_errors.push(format!("Tick {} out of valid range [-887272, 887272]", t));
+                    validation_errors
+                        .push(format!("Tick {} out of valid range [-887272, 887272]", t));
                 }
                 t
             }
@@ -363,8 +379,10 @@ impl DataConvertible for NormalizedV3Slot0 {
             source,
             timestamp_ms: current_timestamp_ms(),
             block_number: None,
-            raw_input: Some(format!("sqrt_price={}, tick={}, liquidity={}",
-                sqrt_price_hex, tick_hex, liquidity_hex)),
+            raw_input: Some(format!(
+                "sqrt_price={}, tick={}, liquidity={}",
+                sqrt_price_hex, tick_hex, liquidity_hex
+            )),
             parsing_errors,
         };
 
@@ -427,7 +445,7 @@ impl DataPipeline {
     pub fn process<T: DataConvertible + Serialize>(
         &mut self,
         raw_data: T::RawInput,
-        source: DataSource
+        source: DataSource,
     ) -> Result<ConversionResult<T>> {
         debug!("Processing data through pipeline");
 
@@ -498,7 +516,9 @@ impl DataPipeline {
     /// 📊 Genera reporte de calidad de datos
     pub fn generate_quality_report(&self) -> HashMap<String, serde_json::Value> {
         let total_entries = self.audit_log.len();
-        let valid_entries = self.audit_log.iter()
+        let valid_entries = self
+            .audit_log
+            .iter()
             .filter(|entry| entry["is_valid"].as_bool().unwrap_or(false))
             .count();
 
@@ -533,9 +553,18 @@ impl DataPipeline {
         }
 
         HashMap::from([
-            ("total_entries".to_string(), serde_json::json!(total_entries)),
-            ("valid_entries".to_string(), serde_json::json!(valid_entries)),
-            ("overall_quality_score".to_string(), serde_json::json!(quality_score)),
+            (
+                "total_entries".to_string(),
+                serde_json::json!(total_entries),
+            ),
+            (
+                "valid_entries".to_string(),
+                serde_json::json!(valid_entries),
+            ),
+            (
+                "overall_quality_score".to_string(),
+                serde_json::json!(quality_score),
+            ),
             ("source_stats".to_string(), serde_json::json!(source_stats)),
         ])
     }
@@ -567,7 +596,9 @@ mod tests {
         let result = parse_hex_to_u256("0x0").unwrap();
         assert!(!result.is_valid);
         assert_eq!(result.data, U256::zero());
-        assert!(result.validation_errors.contains(&"U256 value is zero".to_string()));
+        assert!(result
+            .validation_errors
+            .contains(&"U256 value is zero".to_string()));
     }
 
     #[test]
@@ -590,7 +621,9 @@ mod tests {
     fn test_parse_address_zero() {
         let result = parse_address_to_h160("0x0000000000000000000000000000000000000000").unwrap();
         assert!(!result.is_valid);
-        assert!(result.validation_errors.contains(&"Address is zero address".to_string()));
+        assert!(result
+            .validation_errors
+            .contains(&"Address is zero address".to_string()));
     }
 
     #[test]
@@ -628,7 +661,9 @@ mod tests {
             DataSource::MulticalV1,
         );
 
-        let result = pipeline.process::<NormalizedV2Reserves>(raw_input, DataSource::MulticalV1).unwrap();
+        let result = pipeline
+            .process::<NormalizedV2Reserves>(raw_input, DataSource::MulticalV1)
+            .unwrap();
         assert!(result.is_valid);
         assert_eq!(pipeline.audit_log.len(), 1);
 

@@ -12,13 +12,10 @@ use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, error, info, warn};
 
+use crate::block_number_cache::BlockNumberCache;
 use crate::contracts::{
-    erc20::Erc20,
-    i_uniswap_v2_pair::IUniswapV2Pair,
-    uniswap_v3::UniswapV3Pool,
-    i_balancer_v2_vault::IBalancerV2Vault,
-    i_weighted_pool::IWeightedPool,
-    i_curve_pool::ICurvePool,
+    erc20::Erc20, i_balancer_v2_vault::IBalancerV2Vault, i_curve_pool::ICurvePool,
+    i_uniswap_v2_pair::IUniswapV2Pair, i_weighted_pool::IWeightedPool, uniswap_v3::UniswapV3Pool,
 };
 use crate::data_pipeline::{DataPipeline, DataSource, NormalizedV2Reserves};
 use crate::data_validator::StateQuality;
@@ -27,7 +24,6 @@ use crate::multicall::{Call, Multicall};
 use crate::rpc_pool::{RpcPool, RpcRole};
 use crate::settings::Settings;
 use crate::v3_math::V3PoolState;
-use crate::block_number_cache::BlockNumberCache;
 use std::sync::Arc as StdArc;
 
 /// Unified state update containing all pool state changes
@@ -138,7 +134,7 @@ impl UnifiedStateFetcher {
             // DELTA REFRESH: Only fetch touched pools
             let (v3_touched, v2_touched, curve_touched, balancer_touched) =
                 hot_manager.get_touched_pools();
-            info!("⚡ DELTA REFRESH (cycle {}): Fetching {} V3, {} V2, {} Curve, {} Balancer touched pools", 
+            info!("⚡ DELTA REFRESH (cycle {}): Fetching {} V3, {} V2, {} Curve, {} Balancer touched pools",
                   cycle_number, v3_touched.len(), v2_touched.len(), curve_touched.len(), balancer_touched.len());
             (v3_touched, v2_touched, curve_touched, balancer_touched)
         };
@@ -200,34 +196,51 @@ impl UnifiedStateFetcher {
     ) -> Result<UnifiedStateUpdate> {
         let start_time = Instant::now();
 
-        let (v3_pools, v2_pools, curve_pools, balancer_pools) = if let Some(selected) = selected_pools {
+        let (v3_pools, v2_pools, curve_pools, balancer_pools) = if let Some(selected) =
+            selected_pools
+        {
             // Filter pools from HotPoolManager that are in selected_pools
             let (v3_all, v2_all, curve_all, balancer_all) = hot_manager.get_current_hot_addresses();
-            
-            let v3_filtered: Vec<Address> = v3_all.into_iter()
+
+            let v3_filtered: Vec<Address> = v3_all
+                .into_iter()
                 .filter(|addr| selected.contains(addr))
                 .collect();
-            let v2_filtered: Vec<Address> = v2_all.into_iter()
+            let v2_filtered: Vec<Address> = v2_all
+                .into_iter()
                 .filter(|addr| selected.contains(addr))
                 .collect();
-            let curve_filtered: Vec<Address> = curve_all.into_iter()
+            let curve_filtered: Vec<Address> = curve_all
+                .into_iter()
                 .filter(|addr| selected.contains(addr))
                 .collect();
-            let balancer_filtered: Vec<Address> = balancer_all.into_iter()
+            let balancer_filtered: Vec<Address> = balancer_all
+                .into_iter()
                 .filter(|addr| selected.contains(addr))
                 .collect();
-            
-            info!("📊 Fetching selected pools: {} V3, {} V2, {} Curve, {} Balancer",
-                  v3_filtered.len(), v2_filtered.len(), curve_filtered.len(), balancer_filtered.len());
-            
+
+            info!(
+                "📊 Fetching selected pools: {} V3, {} V2, {} Curve, {} Balancer",
+                v3_filtered.len(),
+                v2_filtered.len(),
+                curve_filtered.len(),
+                balancer_filtered.len()
+            );
+
             (v3_filtered, v2_filtered, curve_filtered, balancer_filtered)
         } else {
             // Normal behavior: use delta refresh
-            return self.fetch_hot_pool_states_delta(hot_manager, cycle_number).await;
+            return self
+                .fetch_hot_pool_states_delta(hot_manager, cycle_number)
+                .await;
         };
 
         // If no selected pools, return empty update
-        if v3_pools.is_empty() && v2_pools.is_empty() && curve_pools.is_empty() && balancer_pools.is_empty() {
+        if v3_pools.is_empty()
+            && v2_pools.is_empty()
+            && curve_pools.is_empty()
+            && balancer_pools.is_empty()
+        {
             info!("⏭️ No selected pools found in HotPoolManager, skipping fetch");
             return Ok(UnifiedStateUpdate {
                 v3_updates: HashMap::new(),
@@ -289,13 +302,13 @@ impl UnifiedStateFetcher {
                 }
             }
             // Enforce batch budget by shrinking V3 first to preserve MIN_V2_CALLS
-            let total_calls = v3_pools_to_refresh.len() * V3_CALLS_PER_POOL + v2_pools_to_refresh.len();
+            let total_calls =
+                v3_pools_to_refresh.len() * V3_CALLS_PER_POOL + v2_pools_to_refresh.len();
             if total_calls > self.batch_size {
-                let v2_keep = MIN_V2_CALLS.min(v2_pools_to_refresh.len()).min(self.batch_size);
-                let v3_allowed = self
-                    .batch_size
-                    .saturating_sub(v2_keep)
-                    / V3_CALLS_PER_POOL;
+                let v2_keep = MIN_V2_CALLS
+                    .min(v2_pools_to_refresh.len())
+                    .min(self.batch_size);
+                let v3_allowed = self.batch_size.saturating_sub(v2_keep) / V3_CALLS_PER_POOL;
                 if v3_pools_to_refresh.len() > v3_allowed {
                     v3_pools_to_refresh.truncate(v3_allowed);
                 }
@@ -494,7 +507,7 @@ impl UnifiedStateFetcher {
 
                 // Use join_all to process all tasks in parallel
                 let task_results = join_all(tasks).await;
-                
+
                 for (task_idx, task_result) in task_results.into_iter().enumerate() {
                     match task_result {
                         Ok(Ok(sub_results)) => {
@@ -570,7 +583,7 @@ impl UnifiedStateFetcher {
 
             let fetch_duration = start_time.elapsed();
 
-            info!("Unified state fetch completed: {}/{} successful calls in {:?} ({} V3, {} V2, {} Curve, {} Balancer)", 
+            info!("Unified state fetch completed: {}/{} successful calls in {:?} ({} V3, {} V2, {} Curve, {} Balancer)",
               successful_calls, total_calls, fetch_duration,
               v3_updates.len(), v2_updates.len(), curve_updates.len(), balancer_updates.len());
 
@@ -583,7 +596,7 @@ impl UnifiedStateFetcher {
             } else {
                 0u64
             };
-            
+
             let head_block = if head_block == 0 {
                 provider
                     .get_block_number()
@@ -711,7 +724,7 @@ impl UnifiedStateFetcher {
         } else {
             0u64
         };
-        
+
         let block_number = if block_number == 0 {
             provider
                 .get_block_number()
@@ -782,7 +795,11 @@ impl UnifiedStateFetcher {
             call_index_map.push(("v3_liquidity", pool_addr));
         }
 
-        let mc = Multicall::new(Arc::clone(provider), self.multicall_address, self.batch_size);
+        let mc = Multicall::new(
+            Arc::clone(provider),
+            self.multicall_address,
+            self.batch_size,
+        );
         let results = match mc.run(calls, None).await {
             Ok(res) => res,
             Err(e) => {
@@ -828,7 +845,11 @@ impl UnifiedStateFetcher {
             call_index_map.push(("v2_reserves", pool_addr));
         }
 
-        let mc = Multicall::new(Arc::clone(provider), self.multicall_address, self.batch_size);
+        let mc = Multicall::new(
+            Arc::clone(provider),
+            self.multicall_address,
+            self.batch_size,
+        );
         let results = match mc.run(calls, None).await {
             Ok(res) => res,
             Err(e) => {
@@ -903,7 +924,11 @@ impl UnifiedStateFetcher {
             return HashMap::new();
         }
 
-        let mc = Multicall::new(Arc::clone(provider), self.multicall_address, self.batch_size);
+        let mc = Multicall::new(
+            Arc::clone(provider),
+            self.multicall_address,
+            self.batch_size,
+        );
         let results = match mc.run(calls, None).await {
             Ok(res) => res,
             Err(e) => {
@@ -975,7 +1000,11 @@ impl UnifiedStateFetcher {
             return HashMap::new();
         }
 
-        let mc = Multicall::new(Arc::clone(provider), self.multicall_address, self.batch_size);
+        let mc = Multicall::new(
+            Arc::clone(provider),
+            self.multicall_address,
+            self.batch_size,
+        );
         let results = match mc.run(calls, None).await {
             Ok(res) => res,
             Err(e) => {
@@ -1095,61 +1124,57 @@ impl UnifiedStateFetcher {
             }
 
             match *call_type {
-                "v3_slot0" => {
-                    match slot0_fn.decode_output(&result_data.0) {
-                        Ok(decoded) => {
-                            if let (Some(sqrt_price), Some(tick_token)) = (
-                                decoded.get(0).and_then(|t| t.clone().into_uint()),
-                                decoded.get(1).and_then(|t| t.clone().into_int()),
-                            ) {
-                                let tick_i32 = if tick_token.bit(23) {
-                                    let mask = U256::from(0xFFFFFF);
-                                    -((((!tick_token & mask) + 1) & mask).as_u32() as i32)
-                                } else {
-                                    tick_token.as_u32() as i32
-                                };
+                "v3_slot0" => match slot0_fn.decode_output(&result_data.0) {
+                    Ok(decoded) => {
+                        if let (Some(sqrt_price), Some(tick_token)) = (
+                            decoded.get(0).and_then(|t| t.clone().into_uint()),
+                            decoded.get(1).and_then(|t| t.clone().into_int()),
+                        ) {
+                            let tick_i32 = if tick_token.bit(23) {
+                                let mask = U256::from(0xFFFFFF);
+                                -((((!tick_token & mask) + 1) & mask).as_u32() as i32)
+                            } else {
+                                tick_token.as_u32() as i32
+                            };
 
-                                let partial = v3_partial_states
-                                    .entry(*pool_addr)
-                                    .or_insert(PartialV3State::default());
-                                partial.sqrt_price_x96 = Some(sqrt_price);
-                                partial.tick = Some(tick_i32 as i64);
-                                successful_calls += 1;
-                            }
-                        }
-                        Err(e) => {
-                            warn!(pool_addr = ?pool_addr, error = ?e, "V3 slot0 decoding failed");
-                            let c = v3_partial_fail_counts.entry(*pool_addr).or_insert(0);
-                            *c = c.saturating_add(1);
+                            let partial = v3_partial_states
+                                .entry(*pool_addr)
+                                .or_insert(PartialV3State::default());
+                            partial.sqrt_price_x96 = Some(sqrt_price);
+                            partial.tick = Some(tick_i32 as i64);
+                            successful_calls += 1;
                         }
                     }
-                }
-                "v3_liquidity" => {
-                    match liquidity_fn.decode_output(&result_data.0) {
-                        Ok(decoded) => {
-                            if let Some(liquidity_u256) = decoded[0].clone().into_uint() {
-                                if let Some(liquidity) = liquidity_u256.try_into().ok() {
-                                    if liquidity > 0 {
-                                        let partial = v3_partial_states
-                                            .entry(*pool_addr)
-                                            .or_insert(PartialV3State::default());
-                                        partial.liquidity = Some(liquidity);
-                                        successful_calls += 1;
-                                    } else {
-                                        warn!(pool_addr = ?pool_addr, "V3 pool has zero liquidity");
-                                    }
+                    Err(e) => {
+                        warn!(pool_addr = ?pool_addr, error = ?e, "V3 slot0 decoding failed");
+                        let c = v3_partial_fail_counts.entry(*pool_addr).or_insert(0);
+                        *c = c.saturating_add(1);
+                    }
+                },
+                "v3_liquidity" => match liquidity_fn.decode_output(&result_data.0) {
+                    Ok(decoded) => {
+                        if let Some(liquidity_u256) = decoded[0].clone().into_uint() {
+                            if let Some(liquidity) = liquidity_u256.try_into().ok() {
+                                if liquidity > 0 {
+                                    let partial = v3_partial_states
+                                        .entry(*pool_addr)
+                                        .or_insert(PartialV3State::default());
+                                    partial.liquidity = Some(liquidity);
+                                    successful_calls += 1;
                                 } else {
-                                    warn!(pool_addr = ?pool_addr, "V3 liquidity conversion failed");
+                                    warn!(pool_addr = ?pool_addr, "V3 pool has zero liquidity");
                                 }
+                            } else {
+                                warn!(pool_addr = ?pool_addr, "V3 liquidity conversion failed");
                             }
                         }
-                        Err(e) => {
-                            error!(pool_addr = ?pool_addr, error = ?e, "Failed to decode V3 liquidity output");
-                            let c = v3_partial_fail_counts.entry(*pool_addr).or_insert(0);
-                            *c = c.saturating_add(1);
-                        }
                     }
-                }
+                    Err(e) => {
+                        error!(pool_addr = ?pool_addr, error = ?e, "Failed to decode V3 liquidity output");
+                        let c = v3_partial_fail_counts.entry(*pool_addr).or_insert(0);
+                        *c = c.saturating_add(1);
+                    }
+                },
                 "v3_balance0" => match balance_fn.decode_output(&result_data.0) {
                     Ok(decoded) => {
                         if let Some(balance_uint) =
@@ -1188,49 +1213,47 @@ impl UnifiedStateFetcher {
                         );
                     }
                 },
-                "v2_reserves" => {
-                    match reserves_fn.decode_output(&result_data.0) {
-                        Ok(decoded) => {
-                            if let (Some(reserve0), Some(reserve1)) = (
-                                decoded[0].clone().into_uint(),
-                                decoded[1].clone().into_uint(),
-                            ) {
-                                let reserve0_hex = format!("0x{:x}", reserve0);
-                                let reserve1_hex = format!("0x{:x}", reserve1);
+                "v2_reserves" => match reserves_fn.decode_output(&result_data.0) {
+                    Ok(decoded) => {
+                        if let (Some(reserve0), Some(reserve1)) = (
+                            decoded[0].clone().into_uint(),
+                            decoded[1].clone().into_uint(),
+                        ) {
+                            let reserve0_hex = format!("0x{:x}", reserve0);
+                            let reserve1_hex = format!("0x{:x}", reserve1);
 
-                                let raw_input = (
-                                    reserve0_hex,
-                                    reserve1_hex,
-                                    18u8,
-                                    18u8,
-                                    DataSource::MulticalV2,
-                                );
+                            let raw_input = (
+                                reserve0_hex,
+                                reserve1_hex,
+                                18u8,
+                                18u8,
+                                DataSource::MulticalV2,
+                            );
 
-                                match self.pipeline.process::<NormalizedV2Reserves>(
-                                    raw_input,
-                                    DataSource::MulticalV2,
-                                ) {
-                                    Ok(conversion_result) => {
-                                        if conversion_result.is_valid {
-                                            v2_updates.insert(*pool_addr, (reserve0, reserve1));
-                                            successful_calls += 1;
-                                        } else {
-                                            warn!(pool_addr = ?pool_addr, errors = ?conversion_result.validation_errors, "V2 reserves validation failed");
-                                        }
+                            match self
+                                .pipeline
+                                .process::<NormalizedV2Reserves>(raw_input, DataSource::MulticalV2)
+                            {
+                                Ok(conversion_result) => {
+                                    if conversion_result.is_valid {
+                                        v2_updates.insert(*pool_addr, (reserve0, reserve1));
+                                        successful_calls += 1;
+                                    } else {
+                                        warn!(pool_addr = ?pool_addr, errors = ?conversion_result.validation_errors, "V2 reserves validation failed");
                                     }
-                                    Err(e) => {
-                                        error!(pool_addr = ?pool_addr, error = ?e, "V2 reserves pipeline processing failed");
-                                    }
+                                }
+                                Err(e) => {
+                                    error!(pool_addr = ?pool_addr, error = ?e, "V2 reserves pipeline processing failed");
                                 }
                             }
                         }
-                        Err(e) => {
-                            error!(pool_addr = ?pool_addr, error = ?e, "Failed to decode V2 reserves output");
-                            let c = v2_partial_fail_counts.entry(*pool_addr).or_insert(0);
-                            *c = c.saturating_add(1);
-                        }
                     }
-                }
+                    Err(e) => {
+                        error!(pool_addr = ?pool_addr, error = ?e, "Failed to decode V2 reserves output");
+                        let c = v2_partial_fail_counts.entry(*pool_addr).or_insert(0);
+                        *c = c.saturating_add(1);
+                    }
+                },
                 "curve_balance" => match curve_balances_fn.decode_output(&result_data.0) {
                     Ok(decoded) => {
                         if let Some(balance) = decoded[0].clone().into_uint() {
@@ -1273,35 +1296,33 @@ impl UnifiedStateFetcher {
                         warn!(pool_addr = ?pool_addr, error = ?e, "Curve fee decoding failed");
                     }
                 },
-                "balancer_tokens" => {
-                    match balancer_tokens_fn.decode_output(&result_data.0) {
-                        Ok(decoded) => {
-                            if let (Some(tokens_array), Some(balances_array)) = (
-                                decoded.get(0).and_then(|t| t.clone().into_array()),
-                                decoded.get(1).and_then(|t| t.clone().into_array()),
-                            ) {
-                                let tokens: Vec<Address> = tokens_array
-                                    .iter()
-                                    .filter_map(|t| t.clone().into_address())
-                                    .collect();
-                                let balances: Vec<U256> = balances_array
-                                    .iter()
-                                    .filter_map(|t| t.clone().into_uint())
-                                    .collect();
+                "balancer_tokens" => match balancer_tokens_fn.decode_output(&result_data.0) {
+                    Ok(decoded) => {
+                        if let (Some(tokens_array), Some(balances_array)) = (
+                            decoded.get(0).and_then(|t| t.clone().into_array()),
+                            decoded.get(1).and_then(|t| t.clone().into_array()),
+                        ) {
+                            let tokens: Vec<Address> = tokens_array
+                                .iter()
+                                .filter_map(|t| t.clone().into_address())
+                                .collect();
+                            let balances: Vec<U256> = balances_array
+                                .iter()
+                                .filter_map(|t| t.clone().into_uint())
+                                .collect();
 
-                                let partial = balancer_partial_states
-                                    .entry(*pool_addr)
-                                    .or_insert(PartialBalancerState::default());
-                                partial.tokens = tokens;
-                                partial.balances = balances;
-                                successful_calls += 1;
-                            }
-                        }
-                        Err(e) => {
-                            warn!(pool_addr = ?pool_addr, error = ?e, "Balancer tokens decoding failed");
+                            let partial = balancer_partial_states
+                                .entry(*pool_addr)
+                                .or_insert(PartialBalancerState::default());
+                            partial.tokens = tokens;
+                            partial.balances = balances;
+                            successful_calls += 1;
                         }
                     }
-                }
+                    Err(e) => {
+                        warn!(pool_addr = ?pool_addr, error = ?e, "Balancer tokens decoding failed");
+                    }
+                },
                 "balancer_fee" => match balancer_fee_fn.decode_output(&result_data.0) {
                     Ok(decoded) => {
                         if let Some(fee) = decoded[0].clone().into_uint() {
@@ -1408,7 +1429,10 @@ impl UnifiedStateFetcher {
             if let Some(mut entry) = hot_manager.v3_hot_pools.get_mut(pool_addr) {
                 if new_state.sqrt_price_x96.is_zero() || new_state.liquidity == 0 {
                     if entry.state.sqrt_price_x96.is_zero() || entry.state.liquidity == 0 {
-                        warn!("Pool {} still has zero state after refresh - marking as Corrupt", pool_addr);
+                        warn!(
+                            "Pool {} still has zero state after refresh - marking as Corrupt",
+                            pool_addr
+                        );
                         entry.state_quality = StateQuality::Corrupt;
                         entry.last_updated = now;
                     }
@@ -1475,7 +1499,10 @@ impl UnifiedStateFetcher {
             if let Some(mut entry) = hot_manager.v2_hot_pools.get_mut(pool_addr) {
                 if reserve0.is_zero() || reserve1.is_zero() {
                     if entry.reserve0.is_zero() && entry.reserve1.is_zero() {
-                        warn!("V2 pool {} still has zero reserves after refresh - marking as Corrupt", pool_addr);
+                        warn!(
+                            "V2 pool {} still has zero reserves after refresh - marking as Corrupt",
+                            pool_addr
+                        );
                         entry.state_quality = StateQuality::Corrupt;
                         entry.last_updated = now;
                     }

@@ -1,11 +1,11 @@
 // Deferred Discovery Queue - Cola de pools pendientes de validación
 // Gestiona pools que no se pueden validar inmediatamente por limitaciones de RPC calls
 
+use crate::metrics;
 use dashmap::DashMap;
 use ethers::types::Address;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
-use crate::metrics;
 
 use crate::pool_priority_classifier::ValidationPriority;
 
@@ -50,12 +50,15 @@ impl DeferredDiscoveryQueue {
         if self.pending_validations.len() >= self.max_pending {
             // Si la cola está llena, intentar descartar pools Low priority antiguos
             self.cleanup_old_low_priority(block);
-            
+
             // Si todavía está llena, rechazar pools Low priority nuevos
-            if priority == ValidationPriority::Low && self.pending_validations.len() >= self.max_pending {
+            if priority == ValidationPriority::Low
+                && self.pending_validations.len() >= self.max_pending
+            {
                 debug!(
                     "⚠️ [DeferredQueue] Queue full ({}), rejecting Low priority pool {}",
-                    self.pending_validations.len(), pool
+                    self.pending_validations.len(),
+                    pool
                 );
                 return Err(DeferredQueueError::QueueFull);
             }
@@ -79,11 +82,7 @@ impl DeferredDiscoveryQueue {
 
     /// Obtiene pools para validar en el bloque actual según el presupuesto de calls disponible
     /// Retorna pools ordenados por prioridad y antigüedad
-    pub fn get_validations_for_block(
-        &self,
-        current_block: u64,
-        max_calls: usize,
-    ) -> Vec<Address> {
+    pub fn get_validations_for_block(&self, current_block: u64, max_calls: usize) -> Vec<Address> {
         if max_calls < 3 {
             // Necesitamos al menos 3 calls para validar un pool (bytecode, factory, token0)
             return Vec::new();
@@ -139,7 +138,10 @@ impl DeferredDiscoveryQueue {
                     ValidationPriority::Low => "low",
                 };
                 metrics::increment_streaming_discovery_deferred_pools_processed(priority_str, 1);
-                debug!("✅ [DeferredQueue] Removed validated pool {} from queue", pool);
+                debug!(
+                    "✅ [DeferredQueue] Removed validated pool {} from queue",
+                    pool
+                );
             }
         }
         metrics::set_streaming_discovery_deferred_queue_size(self.pending_validations.len() as f64);
@@ -246,4 +248,3 @@ mod tests {
             .is_err());
     }
 }
-

@@ -670,7 +670,7 @@ pub struct BackgroundDiscoverer {
 }
 
 fn default_fast_lane_interval() -> u64 {
-    300  // 5 minutos (optimizado desde 60s)
+    300 // 5 minutos (optimizado desde 60s)
 }
 
 impl Default for BackgroundDiscoverer {
@@ -691,9 +691,15 @@ pub struct BackgroundValidator {
     pub target_cache_hit_rate: f64,
 }
 
-fn default_min_interval() -> u64 { 60 }
-fn default_max_interval() -> u64 { 120 }
-fn default_target_cache_hit_rate() -> f64 { 0.90 }
+fn default_min_interval() -> u64 {
+    60
+}
+fn default_max_interval() -> u64 {
+    120
+}
+fn default_target_cache_hit_rate() -> f64 {
+    0.90
+}
 
 impl Default for BackgroundValidator {
     fn default() -> Self {
@@ -734,12 +740,11 @@ pub struct JitFetcher {
 impl Default for JitFetcher {
     fn default() -> Self {
         Self {
-            fetch_balances: false,  // Optimizado: no fetchear balances por defecto
+            fetch_balances: false, // Optimizado: no fetchear balances por defecto
             validate_consistency: false,
         }
     }
 }
-
 
 fn default_max_daily_volume_usd() -> f64 {
     500_000.0
@@ -754,8 +759,6 @@ fn default_stop_loss_percentage() -> f64 {
 fn default_pause_duration() -> u64 {
     3600 // 1 hour
 }
-
-
 
 fn default_uncertainty_bps_per_hop() -> u32 {
     1 // 0.01%
@@ -1205,7 +1208,6 @@ fn default_signer_rate_limit_burst() -> u32 {
 }
 */
 
-
 #[derive(Debug, Deserialize, Clone)]
 pub struct Fees {
     #[serde(default)]
@@ -1528,9 +1530,15 @@ pub struct MVPAuto {
     pub max_exec_per_day: Option<u32>,
 }
 
-fn default_min_tvl_usd() -> f64 { 5_000.0 }
-fn default_max_tvl_usd() -> f64 { 50_000.0 }
-fn default_skip_top_tvl_pools() -> u32 { 20 }
+fn default_min_tvl_usd() -> f64 {
+    5_000.0
+}
+fn default_max_tvl_usd() -> f64 {
+    50_000.0
+}
+fn default_skip_top_tvl_pools() -> u32 {
+    20
+}
 
 impl Default for MVP {
     fn default() -> Self {

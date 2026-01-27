@@ -1,7 +1,6 @@
 // src/utils.rs
 // Utility functions for MIG Topology SDK
 
-
 /// Creates a vector of (start_block, end_block) tuples for a given range and chunk size.
 /// Useful for parallelizing block range processing in discovery operations.
 pub fn create_block_chunks(from_block: u64, to_block: u64, chunk_size: u64) -> Vec<(u64, u64)> {
@@ -14,5 +13,3 @@ pub fn create_block_chunks(from_block: u64, to_block: u64, chunk_size: u64) -> V
     }
     chunks
 }
-
-

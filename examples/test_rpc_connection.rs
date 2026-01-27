@@ -15,16 +15,15 @@ async fn main() -> Result<()> {
     println!("🧪 RPC Connection Test - Independent Diagnostic\n");
 
     // Load RPC URLs from environment
-    let http_urls = std::env::var("SDK_RPC_HTTP_URLS")
-        .unwrap_or_else(|_| "[]".to_string());
-    
+    let http_urls = std::env::var("SDK_RPC_HTTP_URLS").unwrap_or_else(|_| "[]".to_string());
+
     println!("📋 Configuration:");
     println!("   SDK_RPC_HTTP_URLS: {}\n", http_urls);
 
     // Parse using same logic as Settings::parse_string_list
     let urls: Vec<String> = parse_string_list(&http_urls)
         .ok_or_else(|| anyhow::anyhow!("Failed to parse SDK_RPC_HTTP_URLS"))?;
-    
+
     if urls.is_empty() {
         eprintln!("❌ No RPC URLs found in SDK_RPC_HTTP_URLS");
         eprintln!("   Expected format: [\"https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY\", ...]");
@@ -78,10 +77,16 @@ async fn test_rpc_url(url: &str) -> Result<()> {
     // Test 2: get_block (Latest)
     println!("3️⃣ Testing get_block(BlockId::Number(BlockNumber::Latest))...");
     let start = Instant::now();
-    match provider.get_block(BlockId::Number(BlockNumber::Latest)).await {
+    match provider
+        .get_block(BlockId::Number(BlockNumber::Latest))
+        .await
+    {
         Ok(Some(block)) => {
             let elapsed = start.elapsed();
-            println!("   ✅ Block retrieved: #{}", block.number.unwrap_or_default());
+            println!(
+                "   ✅ Block retrieved: #{}",
+                block.number.unwrap_or_default()
+            );
             println!("   ⏱️  Latency: {:?}\n", elapsed);
         }
         Ok(None) => {
@@ -96,13 +101,11 @@ async fn test_rpc_url(url: &str) -> Result<()> {
     println!("4️⃣ Testing get_logs() with simple filter...");
     let current_block = provider.get_block_number().await?.as_u64();
     let from_block = current_block.saturating_sub(100);
-    
+
     println!("   Block range: {} to {}", from_block, current_block);
-    
-    let filter = Filter::new()
-        .from_block(from_block)
-        .to_block(current_block);
-    
+
+    let filter = Filter::new().from_block(from_block).to_block(current_block);
+
     let start = Instant::now();
     match provider.get_logs(&filter).await {
         Ok(logs) => {
@@ -115,7 +118,7 @@ async fn test_rpc_url(url: &str) -> Result<()> {
             eprintln!("   ❌ get_logs failed after {:?}", elapsed);
             eprintln!("   Error: {}", e);
             eprintln!("   Error type: {:?}\n", e);
-            
+
             // Try to get more details
             let error_str = format!("{}", e);
             if error_str.contains("EOF") || error_str.contains("empty") {
@@ -128,29 +131,32 @@ async fn test_rpc_url(url: &str) -> Result<()> {
 
     // Test 4: Event query using ethers contract (like UniswapV2Adapter does)
     println!("5️⃣ Testing event query (PairCreated from UniswapV2 Factory)...");
-    
+
     // UniswapV2 Factory address on Arbitrum
     let factory_address: Address = "0xf1D7CC64Fb4452F05c498126312eBE29f30Fbcf9"
         .parse()
         .unwrap();
-    
+
     println!("   Factory address: {:?}", factory_address);
     println!("   Block range: {} to {}", from_block, current_block);
-    
+
     // Create contract instance
     let factory = IUniswapV2Factory::new(factory_address, Arc::clone(&provider));
-    
+
     // Create event filter
     let event_filter = factory
         .event::<PairCreatedFilter>()
         .from_block(from_block)
         .to_block(current_block);
-    
+
     let start = Instant::now();
     match event_filter.query().await {
         Ok(logs) => {
             let elapsed = start.elapsed();
-            println!("   ✅ Event query successful: {} PairCreated events found", logs.len());
+            println!(
+                "   ✅ Event query successful: {} PairCreated events found",
+                logs.len()
+            );
             println!("   ⏱️  Latency: {:?}\n", elapsed);
         }
         Err(e) => {
@@ -158,10 +164,13 @@ async fn test_rpc_url(url: &str) -> Result<()> {
             eprintln!("   ❌ Event query failed after {:?}", elapsed);
             eprintln!("   Error: {}", e);
             eprintln!("   Error type: {:?}\n", e);
-            
+
             // Check for specific error patterns
             let error_str = format!("{}", e);
-            if error_str.contains("EOF") || error_str.contains("empty") || error_str.contains("EOF while parsing") {
+            if error_str.contains("EOF")
+                || error_str.contains("empty")
+                || error_str.contains("EOF while parsing")
+            {
                 eprintln!("   ⚠️  ⚠️  ⚠️  THIS IS THE ERROR WE'RE INVESTIGATING! ⚠️  ⚠️  ⚠️");
                 eprintln!("   The RPC is returning an empty response to event queries.");
                 eprintln!("   This suggests:");

@@ -74,7 +74,7 @@ impl PoolPriorityClassifier {
         // Critical: Pool con ambos tokens blue-chip
         let has_blue_chip_token0 = self.blue_chip_tokens.contains(&candidate.token0);
         let has_blue_chip_token1 = self.blue_chip_tokens.contains(&candidate.token1);
-        
+
         if has_blue_chip_token0 && has_blue_chip_token1 {
             debug!(
                 "🔴 [PriorityClassifier] Pool {} classified as CRITICAL (both tokens blue-chip)",
@@ -103,7 +103,7 @@ impl PoolPriorityClassifier {
         // Medium: Pool con tokens conocidos (pero no blue-chip)
         let has_known_token0 = known_tokens.contains(&candidate.token0);
         let has_known_token1 = known_tokens.contains(&candidate.token1);
-        
+
         if has_known_token0 || has_known_token1 {
             debug!(
                 "🟡 [PriorityClassifier] Pool {} classified as MEDIUM (has known token)",
@@ -125,7 +125,12 @@ impl PoolPriorityClassifier {
         &self,
         candidates: &[PoolCandidate],
         known_tokens: &HashSet<Address>,
-    ) -> (Vec<PoolCandidate>, Vec<PoolCandidate>, Vec<PoolCandidate>, Vec<PoolCandidate>) {
+    ) -> (
+        Vec<PoolCandidate>,
+        Vec<PoolCandidate>,
+        Vec<PoolCandidate>,
+        Vec<PoolCandidate>,
+    ) {
         let mut critical = Vec::new();
         let mut high = Vec::new();
         let mut medium = Vec::new();
@@ -203,4 +208,3 @@ mod tests {
         assert_eq!(priority, ValidationPriority::Low);
     }
 }
-

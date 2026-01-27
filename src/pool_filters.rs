@@ -18,22 +18,22 @@ use std::time::{Duration, Instant};
 pub struct PoolFilterConfig {
     // 1. Effective liquidity filter
     pub min_effective_liquidity_eth: f64, // Minimum liquidity in ETH equivalent
-    
+
     // 2. Global price deviation filter
     pub max_price_deviation_bps: u32, // Maximum deviation from global price (in basis points)
-    
+
     // 3. Stale data filter
     pub max_stale_blocks: u64, // Maximum blocks since last update
-    
+
     // 4. Volume filter
     pub min_volume_24h_usd: f64, // Minimum 24h volume in USD
-    
+
     // 5. Fee tier filter
     pub allowed_fee_tiers: Vec<u32>, // Allowed fee tiers (e.g., [5, 30, 100] for 0.05%, 0.3%, 1%)
-    
+
     // 6. DEX whitelist
     pub allowed_dexs: Vec<String>, // Allowed DEX names
-    
+
     // 7. Pool size vs trade size filter
     pub min_reserve_multiplier: f64, // reserve >= amount_in * multiplier (e.g., 5.0 = 5x)
 }
@@ -42,10 +42,10 @@ impl Default for PoolFilterConfig {
     fn default() -> Self {
         Self {
             // Conservative defaults for professional use
-            min_effective_liquidity_eth: 3.0, // 3 ETH minimum
-            max_price_deviation_bps: 30,      // 0.3% max deviation
-            max_stale_blocks: 3,              // 3 blocks max age
-            min_volume_24h_usd: 50000.0,      // $50K minimum volume
+            min_effective_liquidity_eth: 3.0,    // 3 ETH minimum
+            max_price_deviation_bps: 30,         // 0.3% max deviation
+            max_stale_blocks: 3,                 // 3 blocks max age
+            min_volume_24h_usd: 50000.0,         // $50K minimum volume
             allowed_fee_tiers: vec![5, 30, 100], // 0.05%, 0.3%, 1%
             allowed_dexs: vec![
                 "Uniswap V3".to_string(),
@@ -122,19 +122,19 @@ impl<M: Middleware> PoolFilter<M> {
         M: Middleware + 'static,
     {
         use std::str::FromStr;
-        
+
         // Cargar precios de tokens solicitados
         for token in tokens {
             if let Ok(price) = self.price_feed.get_usd_price(*token).await {
                 self.global_prices.insert(*token, price);
             }
         }
-        
+
         // ✅ MEJORADO: Siempre asegurar que WETH está en cache para estimate_eth_value
         // WETH address on Arbitrum: 0x82af49447d8a07e3bd95bd0d56f35241523fbab1
         let weth_address = Address::from_str("0x82af49447d8a07e3bd95bd0d56f35241523fbab1")
             .unwrap_or_else(|_| Address::zero());
-        
+
         // ✅ MEJORADO: Cargar WETH desde PriceFeed (usa CoinGecko/external APIs con cache)
         // Este precio se actualiza periódicamente (1-2 veces/día) y se cachea con timestamp
         if let Ok(weth_price) = self.price_feed.get_usd_price(weth_address).await {
@@ -205,13 +205,9 @@ impl<M: Middleware> PoolFilter<M> {
         }
 
         // 3. Check price deviation from global
-        let price_deviation_result = self.check_price_deviation_v2(
-            snapshot,
-            token_in,
-            token_out,
-            decimals_in,
-            decimals_out,
-        ).await;
+        let price_deviation_result = self
+            .check_price_deviation_v2(snapshot, token_in, token_out, decimals_in, decimals_out)
+            .await;
 
         if !price_deviation_result.is_valid {
             return price_deviation_result;
@@ -224,12 +220,7 @@ impl<M: Middleware> PoolFilter<M> {
         }
 
         // 5. Check reserve vs trade size
-        let reserve_check = self.check_reserve_size_v2(
-            snapshot,
-            amount_in,
-            token_in,
-            decimals_in,
-        );
+        let reserve_check = self.check_reserve_size_v2(snapshot, amount_in, token_in, decimals_in);
 
         if !reserve_check.is_valid {
             return reserve_check;
@@ -294,13 +285,9 @@ impl<M: Middleware> PoolFilter<M> {
         }
 
         // 4. Check price deviation from global
-        let price_deviation_result = self.check_price_deviation_v3(
-            snapshot,
-            token_in,
-            token_out,
-            decimals_in,
-            decimals_out,
-        ).await;
+        let price_deviation_result = self
+            .check_price_deviation_v3(snapshot, token_in, token_out, decimals_in, decimals_out)
+            .await;
 
         if !price_deviation_result.is_valid {
             return price_deviation_result;
@@ -313,12 +300,8 @@ impl<M: Middleware> PoolFilter<M> {
         }
 
         // 6. Check liquidity vs trade size (V3 uses liquidity, not reserves)
-        let liquidity_check = self.check_liquidity_size_v3(
-            snapshot,
-            amount_in,
-            token_in,
-            decimals_in,
-        );
+        let liquidity_check =
+            self.check_liquidity_size_v3(snapshot, amount_in, token_in, decimals_in);
 
         if !liquidity_check.is_valid {
             return liquidity_check;
@@ -369,11 +352,8 @@ impl<M: Middleware> PoolFilter<M> {
         // Convert to ETH equivalent (we need token prices)
         // For now, we'll use a simplified check: ensure reserves are non-zero and reasonable
         // TODO: Convert to ETH using price feed
-        let effective_liquidity_eth = self.estimate_eth_value(
-            effective_liquidity,
-            token_in,
-            decimals_in,
-        );
+        let effective_liquidity_eth =
+            self.estimate_eth_value(effective_liquidity, token_in, decimals_in);
 
         if effective_liquidity_eth < self.config.min_effective_liquidity_eth {
             metrics::increment_pool_filter_effective_liquidity_too_low();
@@ -425,11 +405,8 @@ impl<M: Middleware> PoolFilter<M> {
             balance_out
         };
 
-        let effective_liquidity_eth = self.estimate_eth_value(
-            effective_balance,
-            token_in,
-            decimals_in,
-        );
+        let effective_liquidity_eth =
+            self.estimate_eth_value(effective_balance, token_in, decimals_in);
 
         if effective_liquidity_eth < self.config.min_effective_liquidity_eth {
             metrics::increment_pool_filter_effective_liquidity_too_low();
@@ -665,9 +642,9 @@ impl<M: Middleware> PoolFilter<M> {
         };
 
         // Check: reserve_in >= amount_in * multiplier
-        let min_reserve = amount_in
-            .saturating_mul(U256::from((self.config.min_reserve_multiplier * 1e18) as u128))
-            / U256::from(1e18 as u128);
+        let min_reserve = amount_in.saturating_mul(U256::from(
+            (self.config.min_reserve_multiplier * 1e18) as u128,
+        )) / U256::from(1e18 as u128);
 
         if reserve_in < min_reserve {
             metrics::increment_pool_filter_reserve_too_small();
@@ -707,9 +684,9 @@ impl<M: Middleware> PoolFilter<M> {
             snapshot.token1_balance
         };
 
-        let min_balance = amount_in
-            .saturating_mul(U256::from((self.config.min_reserve_multiplier * 1e18) as u128))
-            / U256::from(1e18 as u128);
+        let min_balance = amount_in.saturating_mul(U256::from(
+            (self.config.min_reserve_multiplier * 1e18) as u128,
+        )) / U256::from(1e18 as u128);
 
         if balance_in < min_balance {
             metrics::increment_pool_filter_reserve_too_small();
@@ -739,35 +716,33 @@ impl<M: Middleware> PoolFilter<M> {
     /// No usa fallbacks hardcodeados - siempre requiere precio real desde PriceFeed cache
     fn estimate_eth_value(&self, amount: U256, token: Address, decimals: u8) -> f64 {
         use std::str::FromStr;
-        
+
         // WETH address on Arbitrum
         let weth_address = Address::from_str("0x82af49447d8a07e3bd95bd0d56f35241523fbab1")
             .unwrap_or_else(|_| Address::zero());
-        
+
         // Try to get token price from cache
         if let Some(price_usd) = self.global_prices.get(&token) {
             let amount_f64 = amount.as_u128() as f64 / 10f64.powi(decimals as i32);
             let value_usd = amount_f64 * price_usd;
-            
+
             // ✅ Obtener precio de ETH/WETH desde cache global (viene de PriceFeed/CoinGecko)
             // Si no está en global_prices, intentar usar cache con timestamp (< 24h)
-            let eth_price_usd = self.global_prices.get(&weth_address)
-                .copied()
-                .or_else(|| {
-                    // Fallback a cache con timestamp si tiene < 24 horas
-                    if let Some((cached_price, cached_time)) = &self.weth_price_cache {
-                        let age = cached_time.elapsed();
-                        if age < Duration::from_secs(24 * 60 * 60) {
-                            Some(*cached_price)
-                        } else {
-                            warn!("⚠️ WETH price cache expired (>24h), cannot convert to ETH");
-                            None
-                        }
+            let eth_price_usd = self.global_prices.get(&weth_address).copied().or_else(|| {
+                // Fallback a cache con timestamp si tiene < 24 horas
+                if let Some((cached_price, cached_time)) = &self.weth_price_cache {
+                    let age = cached_time.elapsed();
+                    if age < Duration::from_secs(24 * 60 * 60) {
+                        Some(*cached_price)
                     } else {
+                        warn!("⚠️ WETH price cache expired (>24h), cannot convert to ETH");
                         None
                     }
-                });
-            
+                } else {
+                    None
+                }
+            });
+
             match eth_price_usd {
                 Some(price) => value_usd / price,
                 None => {
@@ -778,9 +753,11 @@ impl<M: Middleware> PoolFilter<M> {
             }
         } else {
             // Token price not available - cannot estimate ETH value
-            warn!("⚠️ Cannot estimate ETH value: token price not available for {:?}", token);
+            warn!(
+                "⚠️ Cannot estimate ETH value: token price not available for {:?}",
+                token
+            );
             0.0
         }
     }
 }
-

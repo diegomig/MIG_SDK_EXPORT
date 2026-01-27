@@ -1,12 +1,12 @@
 // Discovery Result Processor - Procesa pools validados y los inserta en la DB
 // Maneja la inserción asíncrona y actualización del grafo
 
+use crate::metrics;
 use anyhow::Result;
 use ethers::prelude::Middleware;
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, info, warn};
-use crate::metrics;
 
 use crate::database::DbPool;
 use crate::dex_adapter::PoolMeta;
@@ -50,7 +50,10 @@ impl<M: Middleware + 'static> DiscoveryResultProcessor<M> {
         for pool_data in validated {
             match &pool_data.validation_result {
                 ValidationResult::Valid => {
-                    match self.insert_pool(&pool_data.pool_meta, pool_data.discovered_at_block).await {
+                    match self
+                        .insert_pool(&pool_data.pool_meta, pool_data.discovered_at_block)
+                        .await
+                    {
                         Ok(was_new) => {
                             if was_new {
                                 inserted += 1;
@@ -92,7 +95,10 @@ impl<M: Middleware + 'static> DiscoveryResultProcessor<M> {
 
         // Actualizar grafo con los nuevos pools válidos
         if inserted > 0 {
-            debug!("🔄 [ResultProcessor] Updating graph with {} new pools", inserted);
+            debug!(
+                "🔄 [ResultProcessor] Updating graph with {} new pools",
+                inserted
+            );
             if let Err(e) = self.graph_service.calculate_and_update_all_weights().await {
                 warn!("⚠️ [ResultProcessor] Failed to update graph weights: {}", e);
             }
@@ -112,25 +118,23 @@ impl<M: Middleware + 'static> DiscoveryResultProcessor<M> {
     /// Inserta un pool en la DB (idempotente)
     async fn insert_pool(&self, pool: &PoolMeta, discovered_at_block: u64) -> Result<bool> {
         // Verificar si el pool ya existe
-        let existing = sqlx::query(
-            "SELECT id FROM pools WHERE address = $1"
-        )
-        .bind(format!("{:?}", pool.address))
-        .fetch_optional(&*self.db_pool)
-        .await?;
+        let existing = sqlx::query("SELECT id FROM pools WHERE address = $1")
+            .bind(format!("{:?}", pool.address))
+            .fetch_optional(&*self.db_pool)
+            .await?;
 
         if existing.is_some() {
             // Pool ya existe, actualizar metadata si es necesario
             sqlx::query(
-                "UPDATE pools SET 
-                    dex = $2, 
-                    pool_type = $3, 
+                "UPDATE pools SET
+                    dex = $2,
+                    pool_type = $3,
                     fee = $4,
                     token0 = $5,
                     token1 = $6,
                     factory = $7,
                     updated_at = NOW()
-                WHERE address = $1"
+                WHERE address = $1",
             )
             .bind(format!("{:?}", pool.address))
             .bind(&pool.dex)
@@ -159,7 +163,7 @@ impl<M: Middleware + 'static> DiscoveryResultProcessor<M> {
                 token0 = EXCLUDED.token0,
                 token1 = EXCLUDED.token1,
                 factory = EXCLUDED.factory,
-                updated_at = NOW()"
+                updated_at = NOW()",
         )
         .bind(format!("{:?}", pool.address))
         .bind(&pool.dex)
@@ -217,4 +221,3 @@ mod tests {
         assert_eq!(results.valid(), 7);
     }
 }
-

@@ -1,7 +1,7 @@
 // src/pools.rs
 
-use ethers::prelude::{Address, U256, Provider, Http};
 use ethers::middleware::Middleware;
+use ethers::prelude::{Address, Http, Provider, U256};
 use ethers::types::{Bytes, TransactionRequest};
 use ethers::utils::keccak256;
 use tokio::time::{timeout, Duration};
@@ -11,11 +11,10 @@ pub enum SwapKind {
     ExactInput,
     ExactOutput,
 }
-use serde::{Serialize, Deserialize};
 use anyhow::Result;
-use std::sync::Arc;
+use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
-
+use std::sync::Arc;
 
 /// Unified pool representation across all DEX protocols.
 ///
@@ -64,7 +63,9 @@ impl UniswapV2Pool {
             .to(self.address)
             .data(Bytes::from(data));
 
-        if let Ok(Ok(bytes)) = timeout(Duration::from_secs(8), provider.call(&call.into(), None)).await {
+        if let Ok(Ok(bytes)) =
+            timeout(Duration::from_secs(8), provider.call(&call.into(), None)).await
+        {
             if bytes.0.len() >= 96 {
                 let r0 = U256::from_big_endian(&bytes.0[0..32]);
                 let r1 = U256::from_big_endian(&bytes.0[32..64]);
@@ -106,7 +107,7 @@ pub struct UniswapV3Pool {
     pub dex: &'static str,
 }
 
-use ethers::core::types::{U512};
+use ethers::core::types::U512;
 
 impl UniswapV3Pool {
     /// Creates a new UniswapV3Pool instance.
@@ -141,7 +142,12 @@ impl UniswapV3Pool {
             .to(self.address)
             .data(Bytes::from(slot0_selector));
 
-        if let Ok(Ok(bytes)) = timeout(Duration::from_secs(8), provider.call(&slot0_call.into(), None)).await {
+        if let Ok(Ok(bytes)) = timeout(
+            Duration::from_secs(8),
+            provider.call(&slot0_call.into(), None),
+        )
+        .await
+        {
             // first 32 bytes contain sqrtPriceX96 in the lower 160 bits
             if bytes.0.len() >= 64 {
                 let sqrt = U256::from_big_endian(&bytes.0[0..32]);
@@ -150,8 +156,13 @@ impl UniswapV3Pool {
                 tick_raw.copy_from_slice(&bytes.0[32..64]);
                 // interpret last 3 bytes as signed int24
                 let t_bytes = &tick_raw[29..32];
-                let t_u32 = ((t_bytes[0] as u32) << 16) | ((t_bytes[1] as u32) << 8) | (t_bytes[2] as u32);
-                let tick_i32 = if (t_u32 & 0x800000) != 0 { (t_u32 as i32) | !0xFFFFFF } else { t_u32 as i32 };
+                let t_u32 =
+                    ((t_bytes[0] as u32) << 16) | ((t_bytes[1] as u32) << 8) | (t_bytes[2] as u32);
+                let tick_i32 = if (t_u32 & 0x800000) != 0 {
+                    (t_u32 as i32) | !0xFFFFFF
+                } else {
+                    t_u32 as i32
+                };
                 self.sqrt_price_x96 = sqrt;
                 self.tick = tick_i32;
             }
@@ -164,7 +175,12 @@ impl UniswapV3Pool {
         let liq_call = TransactionRequest::new()
             .to(self.address)
             .data(Bytes::from(liq_selector));
-        if let Ok(Ok(bytes)) = timeout(Duration::from_secs(8), provider.call(&liq_call.into(), None)).await {
+        if let Ok(Ok(bytes)) = timeout(
+            Duration::from_secs(8),
+            provider.call(&liq_call.into(), None),
+        )
+        .await
+        {
             if bytes.0.len() >= 32 {
                 let liq = U256::from_big_endian(&bytes.0[0..32]);
                 self.liquidity = liq.as_u128();

@@ -22,21 +22,16 @@
 //! cargo run --example liquidity_path -- WETH_ADDRESS USDC_ADDRESS
 //! ```
 
-use mig_topology_sdk::{
-    database,
-    graph_service::GraphService,
-    price_feeds::PriceFeed,
-    rpc_pool::RpcPool,
-    settings::Settings,
-    cache::CacheManager,
-    block_number_cache::BlockNumberCache,
-};
 use anyhow::{Context, Result};
-use ethers::prelude::{Address, Provider, Http};
+use ethers::prelude::{Address, Http, Provider};
+use mig_topology_sdk::{
+    block_number_cache::BlockNumberCache, cache::CacheManager, database,
+    graph_service::GraphService, price_feeds::PriceFeed, rpc_pool::RpcPool, settings::Settings,
+};
 use std::collections::HashMap;
 use std::env;
-use std::sync::Arc;
 use std::str::FromStr;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -51,12 +46,13 @@ async fn main() -> Result<()> {
         std::process::exit(1);
     }
 
-    let token0 = Address::from_str(&args[1])
-        .context("Invalid TOKEN0_ADDRESS")?;
-    let token1 = Address::from_str(&args[2])
-        .context("Invalid TOKEN1_ADDRESS")?;
+    let token0 = Address::from_str(&args[1]).context("Invalid TOKEN0_ADDRESS")?;
+    let token1 = Address::from_str(&args[2]).context("Invalid TOKEN1_ADDRESS")?;
 
-    println!("🔍 Finding liquidity path from {:?} to {:?}", token0, token1);
+    println!(
+        "🔍 Finding liquidity path from {:?} to {:?}",
+        token0, token1
+    );
 
     // Initialize SDK components (simplified - see basic_setup.rs for full initialization)
     let settings = Settings::new()?;
@@ -87,13 +83,14 @@ async fn main() -> Result<()> {
     ));
 
     // Create BlockNumberCache for RPC optimization (optional)
-    let (provider_for_cache, _permit, endpoint) = rpc_pool.get_next_provider_with_endpoint().await?;
+    let (provider_for_cache, _permit, endpoint) =
+        rpc_pool.get_next_provider_with_endpoint().await?;
     let block_number_cache = Arc::new(
         BlockNumberCache::new(
             provider_for_cache,
             std::time::Duration::from_secs(1), // Update interval: 1 second
         )
-        .with_flight_recorder(None, endpoint) // No flight recorder in liquidity path example
+        .with_flight_recorder(None, endpoint), // No flight recorder in liquidity path example
     );
 
     // Initialize graph service (no longer requires JitStateFetcher)
@@ -109,10 +106,10 @@ async fn main() -> Result<()> {
 
     // Query database for pools connecting the two tokens
     println!("\n📊 Querying database for pools...");
-    
+
     // Load pools from database (simplified - in production, use proper query)
     let pools = database::load_active_pools(&db_pool).await?;
-    
+
     // Filter pools that connect token0 and token1
     let connecting_pools: Vec<_> = pools
         .iter()
@@ -120,14 +117,14 @@ async fn main() -> Result<()> {
             let (t0, t1) = match pool {
                 mig_topology_sdk::pools::Pool::UniswapV2(p) => (p.token0, p.token1),
                 mig_topology_sdk::pools::Pool::UniswapV3(p) => (p.token0, p.token1),
-                mig_topology_sdk::pools::Pool::BalancerWeighted(p) => {
-                    (p.tokens.get(0).copied().unwrap_or_default(),
-                     p.tokens.get(1).copied().unwrap_or_default())
-                }
-                mig_topology_sdk::pools::Pool::CurveStableSwap(p) => {
-                    (p.tokens.get(0).copied().unwrap_or_default(),
-                     p.tokens.get(1).copied().unwrap_or_default())
-                }
+                mig_topology_sdk::pools::Pool::BalancerWeighted(p) => (
+                    p.tokens.get(0).copied().unwrap_or_default(),
+                    p.tokens.get(1).copied().unwrap_or_default(),
+                ),
+                mig_topology_sdk::pools::Pool::CurveStableSwap(p) => (
+                    p.tokens.get(0).copied().unwrap_or_default(),
+                    p.tokens.get(1).copied().unwrap_or_default(),
+                ),
             };
             (t0 == token0 && t1 == token1) || (t0 == token1 && t1 == token0)
         })
@@ -139,7 +136,10 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    println!("✅ Found {} pools connecting the tokens", connecting_pools.len());
+    println!(
+        "✅ Found {} pools connecting the tokens",
+        connecting_pools.len()
+    );
 
     // Find pool with highest weight
     let mut best_pool: Option<(&mig_topology_sdk::pools::Pool, f64)> = None;
@@ -165,20 +165,20 @@ async fn main() -> Result<()> {
             println!("   Pool: {:?}", pool.address());
             println!("   DEX: {}", pool.dex());
             println!("   Weight (USD): ${:.2}", weight);
-            
+
             let (t0, t1) = match pool {
                 mig_topology_sdk::pools::Pool::UniswapV2(p) => (p.token0, p.token1),
                 mig_topology_sdk::pools::Pool::UniswapV3(p) => (p.token0, p.token1),
-                mig_topology_sdk::pools::Pool::BalancerWeighted(p) => {
-                    (p.tokens.get(0).copied().unwrap_or_default(),
-                     p.tokens.get(1).copied().unwrap_or_default())
-                }
-                mig_topology_sdk::pools::Pool::CurveStableSwap(p) => {
-                    (p.tokens.get(0).copied().unwrap_or_default(),
-                     p.tokens.get(1).copied().unwrap_or_default())
-                }
+                mig_topology_sdk::pools::Pool::BalancerWeighted(p) => (
+                    p.tokens.get(0).copied().unwrap_or_default(),
+                    p.tokens.get(1).copied().unwrap_or_default(),
+                ),
+                mig_topology_sdk::pools::Pool::CurveStableSwap(p) => (
+                    p.tokens.get(0).copied().unwrap_or_default(),
+                    p.tokens.get(1).copied().unwrap_or_default(),
+                ),
             };
-            
+
             println!("   Token0: {:?}", t0);
             println!("   Token1: {:?}", t1);
         }
@@ -190,4 +190,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-

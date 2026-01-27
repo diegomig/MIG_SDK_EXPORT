@@ -59,7 +59,10 @@ macro_rules! describe_histogram {
 
 // Re-export macros for use in this module when observability is disabled
 #[cfg(not(feature = "observability"))]
-use crate::{counter, gauge, histogram, increment_counter, describe_counter, describe_gauge, describe_histogram};
+use crate::{
+    counter, describe_counter, describe_gauge, describe_histogram, gauge, histogram,
+    increment_counter,
+};
 
 use std::sync::atomic::AtomicU64;
 
@@ -173,14 +176,14 @@ pub fn describe_metrics() {
         Unit::Count,
         "Total number of RPC errors, labeled by provider URL."
     );
-    
+
     // --- FASE 1.2: BlockParser get_logs Metrics ---
     describe_counter!(
         "block_parser_get_logs_total",
         Unit::Count,
         "Total number of get_logs() calls triggered by BlockParser, labeled by trigger reason, touched_count, addresses_count, and block number."
     );
-    
+
     // ✅ OPTIMIZATION: RPC calls per component metrics
     describe_counter!(
         "rpc_calls_total",
@@ -195,7 +198,7 @@ pub fn describe_metrics() {
         "rpc_call_latency_ms",
         "RPC call latency in milliseconds, labeled by component and call_type."
     );
-    
+
     // ✅ OPTIMIZATION: Data coherence metrics
     describe_gauge!(
         "data_coherence_active_pools_count",
@@ -218,7 +221,7 @@ pub fn describe_metrics() {
         Unit::Count,
         "Total number of coherence checks performed, labeled by component and status (ok, warning, error)."
     );
-    
+
     // ✅ OPTIMIZATION: Cache hit rate metrics
     describe_gauge!(
         "background_validator_cache_hit_rate",
@@ -304,7 +307,7 @@ pub fn describe_metrics() {
         Unit::Count,
         "Total number of opportunities rejected by the risk manager, labeled by reason."
     );
-    
+
     // Pool filter metrics
     describe_counter!(
         "pool_filter_rejected_total",
@@ -480,7 +483,7 @@ pub fn describe_metrics() {
         "discovery_pending_queue_size",
         "Number of pools waiting in the discovery/warming pending queue."
     );
-    
+
     // ✅ FASE 10: Streaming Discovery Metrics
     describe_counter!(
         "streaming_discovery_blocks_received_total",
@@ -528,7 +531,7 @@ pub fn describe_metrics() {
         "streaming_discovery_processing_ms",
         "Time taken to process validated pools (DB insert/update) in milliseconds."
     );
-    
+
     // ✅ FASE 10: BlockStream Metrics
     describe_counter!(
         "blockstream_blocks_published_total",
@@ -544,7 +547,7 @@ pub fn describe_metrics() {
         Unit::Count,
         "Total number of lag events (subscribers falling behind) in BlockStream."
     );
-    
+
     describe_counter!(
         "combined_multicall_calls_total",
         Unit::Count,
@@ -691,7 +694,7 @@ pub fn describe_metrics() {
         Unit::Count,
         "Estimated cost of the wrapper swaps in USD."
     );
-    
+
     // P0.2: Nonce manager metrics
     describe_gauge!(
         "nonce_local_pending",
@@ -726,7 +729,7 @@ pub fn describe_metrics() {
         Unit::Count,
         "Total number of pending transactions dropped."
     );
-    
+
     // P0.3: Light node metrics
     describe_histogram!(
         "rpc_latency_ms",
@@ -737,7 +740,7 @@ pub fn describe_metrics() {
         Unit::Count,
         "Total number of RPC health check failures, labeled by provider."
     );
-    
+
     // P1.2: Métricas específicas del plan
     describe_histogram!(
         "end_to_end_latency_seconds",
@@ -800,7 +803,7 @@ pub fn describe_metrics() {
         "v3_local_sim_deviation_bps",
         "Deviation in basis points between local V3 simulator and QuoterV2, for validation."
     );
-    
+
     // Pricing fallback metrics
     describe_counter!(
         "price_fallback_used_total",
@@ -1050,7 +1053,6 @@ pub fn describe_metrics() {
         "bot_db_connections_idle",
         "Number of idle database connections."
     );
-
 }
 
 // --- Helper functions to update metrics ---
@@ -1133,10 +1135,7 @@ pub fn record_sizing_opt_search(duration: std::time::Duration, evaluated_points:
         "sizing_opt_search_latency_ms",
         duration.as_secs_f64() * 1000.0
     );
-    histogram!(
-        "sizing_opt_search_points",
-        evaluated_points as f64
-    );
+    histogram!("sizing_opt_search_points", evaluated_points as f64);
 }
 
 pub fn increment_sizing_opt_search_fallback(reason: &str) {
@@ -1163,7 +1162,6 @@ pub fn increment_pool_state_updates(count: u64) {
     counter!("bot_pool_state_updates_total", count);
 }
 
-
 pub fn increment_quote_cache_hit(dex_kind: &'static str) {
     counter!("bot_quote_cache_hit_total", 1, "dex_kind" => dex_kind);
 }
@@ -1175,7 +1173,6 @@ pub fn increment_quote_cache_miss(dex_kind: &'static str) {
 pub fn set_quote_cache_size(size: f64) {
     gauge!("bot_quote_cache_size", size);
 }
-
 
 pub fn increment_errors(error_type: &'static str) {
     counter!("bot_errors_total", 1, "type" => error_type);
@@ -1192,7 +1189,6 @@ pub fn increment_transaction_errors(op_id: &'static str) {
 pub fn increment_invalidated_pools(reason: &'static str) {
     counter!("bot_pools_invalidated_total", 1, "reason" => reason);
 }
-
 
 pub fn increment_circuit_breaker_opened(provider_url: &str) {
     counter!("bot_circuit_breaker_opened_total", 1, "provider" => provider_url.to_string());
@@ -1217,7 +1213,6 @@ pub fn record_simulation_duration(duration: std::time::Duration) {
     // FASE 7.1: Alias for plan compatibility
     histogram!("simulation_duration_seconds", duration.as_secs_f64());
 }
-
 
 pub fn record_find_optimal_amount_duration(duration: std::time::Duration) {
     histogram!(
@@ -1340,7 +1335,6 @@ pub fn record_pipeline_total_duration(duration_ms: f64) {
     histogram!("pipeline_total_duration_ms", duration_ms);
 }
 
-
 // --- Gauges & heartbeat ---
 
 pub fn record_heartbeat() {
@@ -1394,7 +1388,6 @@ pub fn increment_routes_found(kind: &str) {
 pub fn set_routes_valid_last_block(kind: &str, count: f64) {
     gauge!("bot_routes_valid_last_block", count, "kind" => kind.to_string());
 }
-
 
 pub fn record_wrapper_hops(hops: f64) {
     histogram!("bot_wrapper_hops", hops);
@@ -1500,7 +1493,6 @@ pub fn set_hot_pools_stale_count(count: f64) {
     gauge!("hot_pools_stale_count", count);
 }
 
-
 pub fn record_pipeline_parallelism_ratio(ratio: f64) {
     histogram!("pipeline_parallelism_ratio", ratio);
 }
@@ -1545,7 +1537,6 @@ pub fn record_sizing_selected_amount_usd(amount_usd: f64, rule: &str, clamped: b
         counter!("sizing_clamped_total", 1);
     }
 }
-
 
 // Pool filter metrics
 pub fn increment_pool_filter_rejected(reason: &str) {
@@ -1652,15 +1643,24 @@ pub fn increment_streaming_discovery_deferred_pools_processed(priority: &str, co
 }
 
 pub fn record_streaming_discovery_event_extraction(duration: std::time::Duration) {
-    histogram!("streaming_discovery_event_extraction_ms", duration.as_millis() as f64);
+    histogram!(
+        "streaming_discovery_event_extraction_ms",
+        duration.as_millis() as f64
+    );
 }
 
 pub fn record_streaming_discovery_validation(duration: std::time::Duration) {
-    histogram!("streaming_discovery_validation_ms", duration.as_millis() as f64);
+    histogram!(
+        "streaming_discovery_validation_ms",
+        duration.as_millis() as f64
+    );
 }
 
 pub fn record_streaming_discovery_processing(duration: std::time::Duration) {
-    histogram!("streaming_discovery_processing_ms", duration.as_millis() as f64);
+    histogram!(
+        "streaming_discovery_processing_ms",
+        duration.as_millis() as f64
+    );
 }
 
 // ✅ FASE 10: BlockStream Metrics
@@ -1681,7 +1681,6 @@ pub fn increment_combined_multicall_executions() {
     increment_counter!("combined_multicall_executions_total");
 }
 
-
 pub fn record_combined_multicall_discovery_calls(count: f64) {
     histogram!("combined_multicall_discovery_calls", count);
 }
@@ -1696,7 +1695,10 @@ pub fn increment_combined_multicall_split_events() {
 
 // --- FASE 3: Wrapper Discovery Metrics ---
 pub fn record_wrapper_discovery_duration(duration: std::time::Duration) {
-    histogram!("bot_wrapper_discovery_duration_seconds", duration.as_secs_f64());
+    histogram!(
+        "bot_wrapper_discovery_duration_seconds",
+        duration.as_secs_f64()
+    );
 }
 
 pub fn increment_wrapper_cache_hit() {
@@ -1719,7 +1721,6 @@ pub fn record_redis_operation_duration(operation: &str, duration: std::time::Dur
 pub fn increment_redis_connection_error() {
     increment_counter!("redis_connection_errors_total");
 }
-
 
 pub fn increment_redis_cache_hit() {
     increment_counter!("redis_cache_hits_total");
@@ -1778,14 +1779,14 @@ pub fn set_rpc_calls_per_block(component: &str, count: f64) {
 }
 
 pub fn record_rpc_call_latency(component: &str, call_type: &str, duration: std::time::Duration) {
-    histogram!("rpc_call_latency_ms", duration.as_millis() as f64, 
-               "component" => component.to_string(), 
+    histogram!("rpc_call_latency_ms", duration.as_millis() as f64,
+               "component" => component.to_string(),
                "call_type" => call_type.to_string());
 }
 
 // --- RPC Tracing Metrics (Fase 1.1) ---
 pub fn increment_rpc_call_by_method(component: &str, method: &str) {
-    counter!("rpc_calls_by_method_total", 1, 
+    counter!("rpc_calls_by_method_total", 1,
              "component" => component.to_string(),
              "method" => method.to_string());
 }
@@ -1822,8 +1823,8 @@ pub fn set_data_coherence_stale_weights_count(count: f64) {
 }
 
 pub fn increment_data_coherence_check(component: &str, status: &str) {
-    counter!("data_coherence_check_total", 1, 
-             "component" => component.to_string(), 
+    counter!("data_coherence_check_total", 1,
+             "component" => component.to_string(),
              "status" => status.to_string());
 }
 
@@ -1835,7 +1836,6 @@ pub fn set_background_validator_cache_hit_rate(rate: f64) {
 pub fn set_background_validator_cache_size(size: f64) {
     gauge!("background_validator_cache_size", size);
 }
-
 
 // --- MVP Metrics ---
 pub fn increment_mvp_routes_filtered(reason: &str) {

@@ -19,8 +19,12 @@
 //! cargo run --example basic_setup
 //! ```
 
+use anyhow::Result;
+use ethers::prelude::{Address, Http, Provider};
 use mig_topology_sdk::{
     adapters::{uniswap_v2::UniswapV2Adapter, uniswap_v3::UniswapV3Adapter},
+    block_number_cache::BlockNumberCache,
+    cache::CacheManager,
     database,
     dex_adapter::DexAdapter,
     graph_service::GraphService,
@@ -29,14 +33,10 @@ use mig_topology_sdk::{
     rpc_pool::RpcPool,
     settings::Settings,
     validator::PoolValidator,
-    cache::CacheManager,
-    block_number_cache::BlockNumberCache,
 };
-use anyhow::Result;
-use ethers::prelude::{Address, Provider, Http};
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::str::FromStr;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -72,9 +72,9 @@ async fn main() -> Result<()> {
         .chainlink_oracles
         .iter()
         .filter_map(|(token, oracle)| {
-            Address::from_str(token).ok().and_then(|t| {
-                Address::from_str(oracle).ok().map(|o| (t, o))
-            })
+            Address::from_str(token)
+                .ok()
+                .and_then(|t| Address::from_str(oracle).ok().map(|o| (t, o)))
         })
         .collect();
 
@@ -126,10 +126,7 @@ async fn main() -> Result<()> {
     }
 
     // 8. Create pool validator
-    let validator = Arc::new(PoolValidator::new(
-        rpc_pool.clone(),
-        &settings.validator,
-    ));
+    let validator = Arc::new(PoolValidator::new(rpc_pool.clone(), &settings.validator));
     println!("✅ Pool validator created");
 
     // 9. Create orchestrator
@@ -145,13 +142,14 @@ async fn main() -> Result<()> {
     println!("✅ Orchestrator created");
 
     // 10. Create BlockNumberCache for RPC optimization (optional)
-    let (provider_for_cache, _permit, endpoint) = rpc_pool.get_next_provider_with_endpoint().await?;
+    let (provider_for_cache, _permit, endpoint) =
+        rpc_pool.get_next_provider_with_endpoint().await?;
     let block_number_cache = Arc::new(
         BlockNumberCache::new(
             provider_for_cache,
             std::time::Duration::from_secs(1), // Update interval: 1 second
         )
-        .with_flight_recorder(None, endpoint) // No flight recorder in basic setup
+        .with_flight_recorder(None, endpoint), // No flight recorder in basic setup
     );
     println!("✅ BlockNumberCache initialized");
 
@@ -175,4 +173,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-

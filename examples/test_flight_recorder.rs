@@ -8,7 +8,7 @@
 //! cargo run --example test_flight_recorder
 //! ```
 
-use mig_topology_sdk::flight_recorder::{FlightRecorder, FlightEvent, flight_recorder_writer};
+use mig_topology_sdk::flight_recorder::{flight_recorder_writer, FlightEvent, FlightRecorder};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -36,7 +36,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 3. Enable recorder
     recorder.enable();
     let (enabled, count_before) = recorder.stats();
-    println!("✅ Flight Recorder enabled: enabled={}, events={}", enabled, count_before);
+    println!(
+        "✅ Flight Recorder enabled: enabled={}, events={}",
+        enabled, count_before
+    );
 
     if !enabled {
         eprintln!("❌ ERROR: Flight Recorder is NOT enabled!");
@@ -71,7 +74,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if count_after < 10 {
-        eprintln!("⚠️  WARNING: Only {} events recorded (expected 10)", count_after);
+        eprintln!(
+            "⚠️  WARNING: Only {} events recorded (expected 10)",
+            count_after
+        );
     }
 
     // 6. Wait for flush
@@ -88,8 +94,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("   File size: {} bytes", content.len());
 
             if lines.len() >= 10 {
-                println!("\n✅ TEST PASSED: All {} events written to file", lines.len());
-                
+                println!(
+                    "\n✅ TEST PASSED: All {} events written to file",
+                    lines.len()
+                );
+
                 // Show first event as example
                 if !lines.is_empty() {
                     if let Ok(event_json) = serde_json::from_str::<serde_json::Value>(lines[0]) {
@@ -98,7 +107,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             } else {
-                eprintln!("\n❌ TEST FAILED: Only {} events written (expected 10)", lines.len());
+                eprintln!(
+                    "\n❌ TEST FAILED: Only {} events written (expected 10)",
+                    lines.len()
+                );
                 return Err(format!("Expected 10 events, got {}", lines.len()).into());
             }
         }

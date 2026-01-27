@@ -21,37 +21,37 @@
 //! - SDK_RPC_HTTP_URLS and SDK_RPC_WS_URLS configured with real RPC endpoints
 //! - PostgreSQL and Redis running (via docker-compose)
 
+use anyhow::Result;
+use ethers::prelude::{Address, Http, Provider};
+#[cfg(feature = "redis")]
+use mig_topology_sdk::redis_manager::{RedisConfig, RedisManager};
 use mig_topology_sdk::{
     adapters::{uniswap_v2::UniswapV2Adapter, uniswap_v3::UniswapV3Adapter},
+    background_price_updater::SharedPriceCache,
+    block_number_cache::BlockNumberCache,
+    block_stream::BlockStream,
+    cache::CacheManager,
     database,
     dex_adapter::DexAdapter,
-    flight_recorder::{FlightRecorder, flight_recorder_writer},
+    flight_recorder::{flight_recorder_writer, FlightRecorder},
     graph_service::GraphService,
+    hot_pool_manager::HotPoolManager,
     orchestrator::Orchestrator,
     price_feeds::PriceFeed,
     rpc_pool::RpcPool,
     settings::Settings,
     validator::PoolValidator,
-    cache::CacheManager,
-    hot_pool_manager::HotPoolManager,
-    block_stream::BlockStream,
-    block_number_cache::BlockNumberCache,
-    background_price_updater::SharedPriceCache,
 };
-#[cfg(feature = "redis")]
-use mig_topology_sdk::redis_manager::{RedisManager, RedisConfig};
-use anyhow::Result;
-use ethers::prelude::{Address, Provider, Http};
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::str::FromStr;
-use std::time::Instant;
 use serde_json;
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::time::Instant;
 
 /// ✅ REFACTORIZADO: Usa función compartida de hot_pool_manager
-/// 
+///
 /// Esta función ahora delega a `hot_pool_manager::populate_hot_pool_manager_from_db`
 /// para evitar duplicación de código y corregir el bug del fallback.
 async fn populate_hot_pool_manager_from_db(
@@ -61,24 +61,25 @@ async fn populate_hot_pool_manager_from_db(
     rpc_pool: Arc<RpcPool>,
 ) -> Result<usize> {
     use mig_topology_sdk::hot_pool_manager;
-    
+
     hot_pool_manager::populate_hot_pool_manager_from_db(
         hot_pool_manager,
         graph_service,
         db_pool,
         rpc_pool,
-        10_000.0,  // min_weight: $10K USD
-        200,       // limit: top 200 candidatos
-        50,        // max_hot_pools: top 50 pools
-        true,      // enable_fallback_refresh: sí, ejecutar full refresh si no hay candidatos
-    ).await
+        10_000.0, // min_weight: $10K USD
+        200,      // limit: top 200 candidatos
+        50,       // max_hot_pools: top 50 pools
+        true,     // enable_fallback_refresh: sí, ejecutar full refresh si no hay candidatos
+    )
+    .await
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Load environment variables from .env file
     dotenv::dotenv().ok();
-    
+
     // Initialize logging
     env_logger::init();
 
@@ -91,17 +92,19 @@ async fn main() -> Result<()> {
 
     // 2. Setup Flight Recorder for metrics collection (must be created first to pass to RpcPool)
     let (flight_recorder, event_rx) = FlightRecorder::new();
-    
+
     // ✅ CRITICAL: Create benchmarks directory BEFORE spawning writer
     let benchmarks_dir = Path::new("benchmarks");
     if !benchmarks_dir.exists() {
         fs::create_dir_all(benchmarks_dir)?;
         println!("✅ Created benchmarks directory");
     }
-    
+
     // ✅ CRITICAL: Spawn writer task FIRST (before enabling recorder)
-    let output_file = format!("benchmarks/flight_recorder_{}.jsonl", 
-        chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+    let output_file = format!(
+        "benchmarks/flight_recorder_{}.jsonl",
+        chrono::Utc::now().format("%Y%m%d_%H%M%S")
+    );
     let output_file_clone = output_file.clone();
     println!("🎬 Starting Flight Recorder writer: {}", output_file);
     let writer_handle = tokio::spawn(async move {
@@ -110,23 +113,28 @@ async fn main() -> Result<()> {
             Err(e) => eprintln!("❌ Flight Recorder writer error: {}", e),
         }
     });
-    
+
     // ✅ NOW enable the recorder (after writer is spawned)
     flight_recorder.enable();
-    
+
     // Verify it's enabled
     let (is_enabled_after, count_after_enable) = flight_recorder.stats();
     if !is_enabled_after {
         eprintln!("❌ ERROR: Flight Recorder failed to enable!");
         return Err(anyhow::anyhow!("Flight Recorder could not be enabled"));
     }
-    println!("✅ Flight Recorder enabled (events so far: {})", count_after_enable);
-    
+    println!(
+        "✅ Flight Recorder enabled (events so far: {})",
+        count_after_enable
+    );
+
     // Create Arc after enabling
     let flight_recorder_arc = Arc::new(flight_recorder);
 
     // 3. Create RPC pool for blockchain queries with Flight Recorder
-    let rpc_pool = Arc::new(RpcPool::new(Arc::new(settings.clone()))?.with_flight_recorder(flight_recorder_arc.clone()));
+    let rpc_pool = Arc::new(
+        RpcPool::new(Arc::new(settings.clone()))?.with_flight_recorder(flight_recorder_arc.clone()),
+    );
     println!("✅ RPC pool created with Flight Recorder");
 
     // 4. Connect to PostgreSQL database
@@ -148,9 +156,9 @@ async fn main() -> Result<()> {
         .chainlink_oracles
         .iter()
         .filter_map(|(token, oracle)| {
-            Address::from_str(token).ok().and_then(|t| {
-                Address::from_str(oracle).ok().map(|o| (t, o))
-            })
+            Address::from_str(token)
+                .ok()
+                .and_then(|t| Address::from_str(oracle).ok().map(|o| (t, o)))
         })
         .collect();
 
@@ -162,18 +170,21 @@ async fn main() -> Result<()> {
         .filter_map(|s| Address::from_str(s).ok())
         .collect();
 
-    let price_feed = Arc::new(PriceFeed::new(
-        provider.clone(),
-        oracle_addresses,
-        uniswap_v3_factory,
-        settings.price_feeds.cache_ttl_seconds,
-        multicall_address,
-        settings.performance.multicall_batch_size,
-        cache_manager.clone(),
-        anchor_tokens.clone(),
-        settings.price_feeds.enable_twap_fallback,
-        settings.price_feeds.price_deviation_tolerance_bps,
-    ).with_flight_recorder(flight_recorder_arc.clone()));
+    let price_feed = Arc::new(
+        PriceFeed::new(
+            provider.clone(),
+            oracle_addresses,
+            uniswap_v3_factory,
+            settings.price_feeds.cache_ttl_seconds,
+            multicall_address,
+            settings.performance.multicall_batch_size,
+            cache_manager.clone(),
+            anchor_tokens.clone(),
+            settings.price_feeds.enable_twap_fallback,
+            settings.price_feeds.price_deviation_tolerance_bps,
+        )
+        .with_flight_recorder(flight_recorder_arc.clone()),
+    );
     println!("✅ Price feed initialized with Flight Recorder");
 
     // 8. Create DEX adapters
@@ -197,22 +208,22 @@ async fn main() -> Result<()> {
     println!("✅ DEX adapters created ({} adapters)", adapters.len());
 
     // 9. Create pool validator
-    let validator = Arc::new(PoolValidator::new(
-        rpc_pool.clone(),
-        &settings.validator,
-    ));
+    let validator = Arc::new(PoolValidator::new(rpc_pool.clone(), &settings.validator));
     println!("✅ Pool validator created");
 
     // 10. Create orchestrator with Flight Recorder
-    let orchestrator = Arc::new(Orchestrator::new(
-        adapters,
-        validator,
-        db_pool.clone(),
-        settings.clone(),
-        rpc_pool.clone(),
-        price_feed.clone(),
-        cache_manager.clone(),
-    )?.with_flight_recorder(flight_recorder_arc.clone()));
+    let orchestrator = Arc::new(
+        Orchestrator::new(
+            adapters,
+            validator,
+            db_pool.clone(),
+            settings.clone(),
+            rpc_pool.clone(),
+            price_feed.clone(),
+            cache_manager.clone(),
+        )?
+        .with_flight_recorder(flight_recorder_arc.clone()),
+    );
 
     println!("✅ Orchestrator created");
 
@@ -220,20 +231,25 @@ async fn main() -> Result<()> {
     // Uses default redis://localhost:6379 if REDIS_URL not set (connects to Docker container)
     #[cfg(feature = "redis")]
     let redis_manager_opt: Option<Arc<tokio::sync::Mutex<RedisManager>>> = {
-        let redis_url = std::env::var("REDIS_URL")
-            .unwrap_or_else(|_| "redis://localhost:6379".to_string());
-        
+        let redis_url =
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
+
         match RedisManager::new(RedisConfig {
             url: redis_url.clone(),
             pool_state_ttl: 900, // ✅ FIX CACHE: Increase TTL to 900s (15 minutes) to guarantee hits across all cycles
             route_cache_ttl: 60,
-        }).await {
+        })
+        .await
+        {
             Ok(manager) => {
                 println!("✅ Redis Manager initialized (connecting to {})", redis_url);
                 Some(Arc::new(tokio::sync::Mutex::new(manager)))
             }
             Err(e) => {
-                println!("⚠️  Redis Manager initialization failed ({}): {} (continuing without Redis)", redis_url, e);
+                println!(
+                    "⚠️  Redis Manager initialization failed ({}): {} (continuing without Redis)",
+                    redis_url, e
+                );
                 println!("⚠️  Cache hit rate will be 0% without Redis connection");
                 None
             }
@@ -241,28 +257,32 @@ async fn main() -> Result<()> {
     };
 
     // 12. Create BlockNumberCache for RPC optimization (moved before graph service)
-    let (provider_for_cache, _permit, endpoint) = rpc_pool.get_next_provider_with_endpoint().await?;
+    let (provider_for_cache, _permit, endpoint) =
+        rpc_pool.get_next_provider_with_endpoint().await?;
     let block_number_cache = Arc::new(
         BlockNumberCache::new(
             provider_for_cache,
             std::time::Duration::from_secs(1), // Update interval: 1 second
         )
-        .with_flight_recorder(Some(flight_recorder_arc.clone()), endpoint)
+        .with_flight_recorder(Some(flight_recorder_arc.clone()), endpoint),
     );
     println!("✅ BlockNumberCache initialized");
 
     // 13. Create Hot Pool Manager (top-K pools with adaptive refresh)
-    let hot_pool_manager = Arc::new(HotPoolManager::new(
-        &settings.performance,
-        rpc_pool.clone(),
-        10000.0, // hot_threshold: $10k USD
-    ).with_flight_recorder(flight_recorder_arc.clone()));
+    let hot_pool_manager = Arc::new(
+        HotPoolManager::new(
+            &settings.performance,
+            rpc_pool.clone(),
+            10000.0, // hot_threshold: $10k USD
+        )
+        .with_flight_recorder(flight_recorder_arc.clone()),
+    );
     println!("✅ Hot Pool Manager initialized");
     println!("💡 Hot pools will be populated during first full refresh");
 
     // 13.5. Create SharedPriceCache for anchor tokens and pool fallback support
     let shared_price_cache = Arc::new(SharedPriceCache::new());
-    
+
     // ✅ CRITICAL: Pre-populate SharedPriceCache with anchor token prices from Chainlink
     // This enables pool fallback to work immediately
     let anchor_tokens_for_cache: Vec<Address> = settings
@@ -271,10 +291,20 @@ async fn main() -> Result<()> {
         .iter()
         .filter_map(|s| Address::from_str(s).ok())
         .collect();
-    
+
     if !anchor_tokens_for_cache.is_empty() {
-        println!("📊 Pre-populating SharedPriceCache with {} anchor token prices...", anchor_tokens_for_cache.len());
-        match price_feed.get_usd_prices_batch_with_chainlink_timeout(&anchor_tokens_for_cache, None, std::time::Duration::from_secs(5)).await {
+        println!(
+            "📊 Pre-populating SharedPriceCache with {} anchor token prices...",
+            anchor_tokens_for_cache.len()
+        );
+        match price_feed
+            .get_usd_prices_batch_with_chainlink_timeout(
+                &anchor_tokens_for_cache,
+                None,
+                std::time::Duration::from_secs(5),
+            )
+            .await
+        {
             Ok(anchor_prices) => {
                 let mut prices_map = std::collections::HashMap::new();
                 for (token, price) in anchor_prices {
@@ -284,14 +314,20 @@ async fn main() -> Result<()> {
                 }
                 if !prices_map.is_empty() {
                     let prices_count = prices_map.len();
-                    shared_price_cache.update_batch(prices_map, mig_topology_sdk::background_price_updater::PriceSource::Chainlink);
+                    shared_price_cache.update_batch(
+                        prices_map,
+                        mig_topology_sdk::background_price_updater::PriceSource::Chainlink,
+                    );
                     println!("✅ SharedPriceCache pre-populated with {} anchor token prices (enables pool fallback)", prices_count);
                 } else {
                     println!("⚠️  Failed to fetch any anchor token prices for SharedPriceCache (pool fallback may not work)");
                 }
             }
             Err(e) => {
-                println!("⚠️  Failed to pre-populate SharedPriceCache: {} (pool fallback may not work)", e);
+                println!(
+                    "⚠️  Failed to pre-populate SharedPriceCache: {} (pool fallback may not work)",
+                    e
+                );
             }
         }
     }
@@ -310,13 +346,13 @@ async fn main() -> Result<()> {
         .with_hot_pool_manager(hot_pool_manager.clone())
         .with_block_number_cache(block_number_cache.clone())
         .with_shared_price_cache(shared_price_cache.clone());
-        
+
         #[cfg(feature = "redis")]
         if let Some(ref redis) = redis_manager_opt {
             gs = gs.with_redis(redis.clone());
             println!("✅ Graph service configured with Redis cache");
         }
-        
+
         gs
     });
     println!("✅ Graph service initialized with Hot Pool Manager and BlockNumberCache");
@@ -349,9 +385,9 @@ async fn main() -> Result<()> {
     for cycle in 1..=num_cycles {
         println!("\n🔄 Complete SDK Cycle {}/{}", cycle, num_cycles);
         println!("─────────────────────────────────────────────────────────────");
-        
+
         let cycle_start = Instant::now();
-        
+
         // Execute complete SDK pipeline in correct order:
         // 1. Discovery cycle (discovers and validates pools)
         println!("  📍 Step 1/2: Running discovery cycle...");
@@ -364,15 +400,22 @@ async fn main() -> Result<()> {
                 continue;
             }
         }
-        
+
         // 2. Graph service update (incremental - only discovered pools)
         println!("  📍 Step 2/2: Updating graph weights (incremental)...");
-        
+
         // ✅ INCREMENTAL: Get pools discovered in last 5 minutes (covers this cycle)
-        let discovered_pool_addresses = match database::load_recently_discovered_pools(&db_pool, 300i64).await {
+        let discovered_pool_addresses = match database::load_recently_discovered_pools(
+            &db_pool, 300i64,
+        )
+        .await
+        {
             Ok(addrs) => {
                 if !addrs.is_empty() {
-                    println!("  📊 Found {} recently discovered pools for incremental update", addrs.len());
+                    println!(
+                        "  📊 Found {} recently discovered pools for incremental update",
+                        addrs.len()
+                    );
                     addrs
                 } else {
                     println!("  ℹ️  No recently discovered pools, skipping incremental update");
@@ -384,29 +427,41 @@ async fn main() -> Result<()> {
                 Vec::new()
             }
         };
-        
+
         // ✅ INCREMENTAL: Use incremental method (includes hot pools even if no recent pools)
         // Always call to refresh hot pools, even if no new pools were discovered
-        match graph_service.calculate_and_update_weights_for_pools(&discovered_pool_addresses).await {
+        match graph_service
+            .calculate_and_update_weights_for_pools(&discovered_pool_addresses)
+            .await
+        {
             Ok(_) => {
                 if !discovered_pool_addresses.is_empty() {
-                    println!("  ✅ Graph weights updated incrementally ({} recent pools + hot pools)", discovered_pool_addresses.len());
+                    println!(
+                        "  ✅ Graph weights updated incrementally ({} recent pools + hot pools)",
+                        discovered_pool_addresses.len()
+                    );
                 } else {
                     println!("  ✅ Graph weights updated incrementally (hot pools only, no recent pools)");
                 }
             }
             Err(e) => {
-                eprintln!("  ⚠️  Incremental weight update failed: {} (continuing anyway)", e);
+                eprintln!(
+                    "  ⚠️  Incremental weight update failed: {} (continuing anyway)",
+                    e
+                );
             }
         }
-        
+
         // ✅ FULL REFRESH: Only every 10 cycles (or first cycle)
         if cycle == 1 || cycle % 10 == 0 {
-            println!("  📍 Step 2b/2: Running full weight refresh (cycle {})...", cycle);
+            println!(
+                "  📍 Step 2b/2: Running full weight refresh (cycle {})...",
+                cycle
+            );
             match graph_service.calculate_and_update_all_weights().await {
                 Ok(_) => {
                     println!("  ✅ Full graph weights updated");
-                    
+
                     // ✅ Populate Hot Pool Manager from database (uses pre-calculated weights)
                     println!("  📍 Step 2c/2: Populating Hot Pool Manager from database...");
                     match populate_hot_pool_manager_from_db(
@@ -414,18 +469,23 @@ async fn main() -> Result<()> {
                         graph_service.as_ref(),
                         &db_pool,
                         rpc_pool.clone(),
-                    ).await {
+                    )
+                    .await
+                    {
                         Ok(count) => {
                             println!("  ✅ Hot Pool Manager populated with {} pools", count);
                         }
                         Err(e) => {
-                            eprintln!("  ⚠️  Failed to populate Hot Pool Manager: {} (continuing anyway)", e);
+                            eprintln!(
+                                "  ⚠️  Failed to populate Hot Pool Manager: {} (continuing anyway)",
+                                e
+                            );
                         }
                     }
                 }
                 Err(e) => {
                     eprintln!("  ⚠️  Full weight update failed: {} (continuing anyway)", e);
-                    
+
                     // ✅ RESILIENCY: Try to populate even if weight update failed (uses stale weights)
                     println!("  📍 Step 2c/2: Attempting to populate Hot Pool Manager with existing weights...");
                     if let Ok(count) = populate_hot_pool_manager_from_db(
@@ -433,50 +493,59 @@ async fn main() -> Result<()> {
                         graph_service.as_ref(),
                         &db_pool,
                         rpc_pool.clone(),
-                    ).await {
-                        println!("  ✅ Hot Pool Manager populated with {} pools (using stale weights)", count);
+                    )
+                    .await
+                    {
+                        println!(
+                            "  ✅ Hot Pool Manager populated with {} pools (using stale weights)",
+                            count
+                        );
                     }
                 }
             }
         }
-        
+
         let cycle_duration = cycle_start.elapsed();
         cycle_durations.push(cycle_duration);
         successful_cycles += 1;
-        println!("✅ Complete SDK cycle {} finished in {:.2}s", cycle, cycle_duration.as_secs_f64());
+        println!(
+            "✅ Complete SDK cycle {} finished in {:.2}s",
+            cycle,
+            cycle_duration.as_secs_f64()
+        );
     }
 
     let total_duration = total_start.elapsed();
-    
+
     // 13. Check Flight Recorder stats before collecting events
     let (is_enabled, event_count, _, dropped_count) = flight_recorder_arc.stats_detailed();
     println!("\n📊 Flight Recorder Stats (before flush):");
     println!("   Enabled: {}", is_enabled);
     println!("   Events recorded: {}", event_count);
     println!("   Events dropped: {}", dropped_count);
-    
+
     if !is_enabled {
         eprintln!("⚠️  WARNING: Flight Recorder is NOT enabled!");
     }
-    
+
     if event_count == 0 {
         eprintln!("⚠️  WARNING: No events were recorded!");
     }
-    
+
     // Wait for writer task to flush remaining events
     // Note: We can't easily wait for the writer task to finish since the channel
     // won't close until all senders are dropped. Instead, we'll add a delay
     // and then check the file.
     println!("\n⏳ Waiting for Flight Recorder writer to flush events...");
     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-    
+
     // 14. Collect database statistics
     let pool_counts = database::get_valid_pools_count_per_dex(&db_pool).await?;
     let total_pools: i64 = pool_counts.values().sum();
-    
+
     // 15. Calculate aggregated metrics from Flight Recorder events
     let metrics = analyze_flight_recorder_events(&output_file).await?;
-    
+
     // 15. Generate comprehensive benchmark report
     let report = generate_benchmark_report(
         num_cycles,
@@ -488,17 +557,19 @@ async fn main() -> Result<()> {
         &metrics,
         &output_file,
     );
-    
+
     // Save report to file
-    let report_file = format!("benchmarks/benchmark_report_{}.md", 
-        chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+    let report_file = format!(
+        "benchmarks/benchmark_report_{}.md",
+        chrono::Utc::now().format("%Y%m%d_%H%M%S")
+    );
     fs::write(&report_file, &report)?;
-    
+
     println!("\n═══════════════════════════════════════════════════════════════════");
     println!("📈 Benchmark Summary");
     println!("═══════════════════════════════════════════════════════════════════");
     println!("{}", report);
-    
+
     println!("\n✅ Benchmark metrics collection complete!");
     println!("📝 Flight Recorder events saved to: {}", output_file);
     println!("📊 Benchmark report saved to: {}", report_file);
@@ -511,7 +582,7 @@ async fn main() -> Result<()> {
 async fn analyze_flight_recorder_events(file_path: &str) -> Result<BenchmarkMetrics> {
     let content = fs::read_to_string(file_path)?;
     let lines: Vec<&str> = content.lines().collect();
-    
+
     let mut metrics = BenchmarkMetrics {
         total_events: lines.len(),
         block_starts: 0,
@@ -534,19 +605,19 @@ async fn analyze_flight_recorder_events(file_path: &str) -> Result<BenchmarkMetr
         blockstream_blocks_published: 0,
         blockstream_active_subscribers: Vec::new(),
     };
-    
+
     // ✅ FIX: Track last BlockStart block number for range calculation
     let mut last_block_start: Option<u64> = None;
     let mut cache_events_processed = 0u64; // Debug counter
-    
+
     for line in lines {
         if line.trim().is_empty() {
             continue;
         }
-        
+
         let event: serde_json::Value = serde_json::from_str(line)?;
         let event_type = event["type"].as_str().unwrap_or("");
-        
+
         match event_type {
             "BlockStart" => {
                 metrics.block_starts += 1;
@@ -557,7 +628,7 @@ async fn analyze_flight_recorder_events(file_path: &str) -> Result<BenchmarkMetr
             }
             "CacheEvent" => {
                 cache_events_processed += 1; // Debug counter
-                // ✅ CACHE: Contar cache hits y misses
+                                             // ✅ CACHE: Contar cache hits y misses
                 if let Some(event_type_str) = event.get("event_type").and_then(|v| v.as_str()) {
                     match event_type_str {
                         "hit" => {
@@ -611,26 +682,34 @@ async fn analyze_flight_recorder_events(file_path: &str) -> Result<BenchmarkMetr
                     let duration = event["duration_ms"].as_u64().unwrap_or(0);
                     // ✅ Store full result metadata for detailed analysis
                     if let Some(result) = event.get("result") {
-                        metrics.phase_end_results
+                        metrics
+                            .phase_end_results
                             .entry(phase.to_string())
                             .and_modify(|v: &mut Vec<serde_json::Value>| v.push(result.clone()))
                             .or_insert_with(|| vec![result.clone()]);
-                        
+
                         // ✅ Extract Hot Pool Manager specific metrics
                         if phase == "hot_pool_manager_update_weights" {
                             if let Some(weights_count) = result["weights_count"].as_u64() {
-                                metrics.hot_pool_manager_updates.push(weights_count as usize);
+                                metrics
+                                    .hot_pool_manager_updates
+                                    .push(weights_count as usize);
                             }
                         }
-                        
+
                         // ✅ Extract Graph Updates with Hot Pool sync metrics
                         if phase == "graph_updates" {
-                            if let Some(hot_pool_updated) = result["hot_pool_manager_updated"].as_u64() {
-                                metrics.graph_updates_with_hot_pool.push(hot_pool_updated as usize);
+                            if let Some(hot_pool_updated) =
+                                result["hot_pool_manager_updated"].as_u64()
+                            {
+                                metrics
+                                    .graph_updates_with_hot_pool
+                                    .push(hot_pool_updated as usize);
                             }
                         }
                     }
-                    metrics.phase_end_events
+                    metrics
+                        .phase_end_events
                         .entry(phase.to_string())
                         .and_modify(|v: &mut Vec<u64>| v.push(duration))
                         .or_insert_with(|| vec![duration]);
@@ -642,11 +721,17 @@ async fn analyze_flight_recorder_events(file_path: &str) -> Result<BenchmarkMetr
             _ => {}
         }
     }
-    
+
     // Debug: Print cache events processed
-    eprintln!("🔍 DEBUG: Processed {} CacheEvent entries", cache_events_processed);
-    eprintln!("🔍 DEBUG: Cache hits: {}, misses: {}", metrics.redis_cache_hits, metrics.redis_cache_misses);
-    
+    eprintln!(
+        "🔍 DEBUG: Processed {} CacheEvent entries",
+        cache_events_processed
+    );
+    eprintln!(
+        "🔍 DEBUG: Cache hits: {}, misses: {}",
+        metrics.redis_cache_hits, metrics.redis_cache_misses
+    );
+
     Ok(metrics)
 }
 
@@ -682,7 +767,7 @@ impl BenchmarkMetrics {
         let sum: u64 = self.rpc_call_duration_ms.iter().sum();
         sum as f64 / self.rpc_call_duration_ms.len() as f64
     }
-    
+
     fn p50_rpc_latency_ms(&self) -> f64 {
         if self.rpc_call_duration_ms.is_empty() {
             return 0.0;
@@ -692,7 +777,7 @@ impl BenchmarkMetrics {
         let mid = sorted.len() / 2;
         sorted[mid] as f64
     }
-    
+
     fn p95_rpc_latency_ms(&self) -> f64 {
         if self.rpc_call_duration_ms.is_empty() {
             return 0.0;
@@ -702,7 +787,7 @@ impl BenchmarkMetrics {
         let idx = (sorted.len() as f64 * 0.95) as usize;
         sorted[idx.min(sorted.len() - 1)] as f64
     }
-    
+
     fn p99_rpc_latency_ms(&self) -> f64 {
         if self.rpc_call_duration_ms.is_empty() {
             return 0.0;
@@ -729,30 +814,33 @@ fn generate_benchmark_report(
     } else {
         0.0
     };
-    
-    let min_cycle_duration = cycle_durations.iter()
+
+    let min_cycle_duration = cycle_durations
+        .iter()
         .map(|d| d.as_secs_f64())
         .fold(f64::INFINITY, f64::min);
-    let max_cycle_duration = cycle_durations.iter()
+    let max_cycle_duration = cycle_durations
+        .iter()
         .map(|d| d.as_secs_f64())
         .fold(0.0, f64::max);
-    
+
     let throughput_blocks_per_sec = if total_duration.as_secs_f64() > 0.0 {
         metrics.blocks_processed as f64 / total_duration.as_secs_f64()
     } else {
         0.0
     };
-    
+
     let rpc_success_rate = if metrics.rpc_calls > 0 {
         (metrics.rpc_call_success as f64 / metrics.rpc_calls as f64) * 100.0
     } else {
         0.0
     };
-    
-    format!(r#"# MIG Topology SDK - Benchmark Report
 
-**Generated**: {}  
-**Flight Recorder File**: {}  
+    format!(
+        r#"# MIG Topology SDK - Benchmark Report
+
+**Generated**: {}
+**Flight Recorder File**: {}
 **Test Environment**: Arbitrum One Mainnet (Real RPC)
 
 ## Executive Summary
@@ -903,26 +991,31 @@ These metrics demonstrate:
         // ✅ Integrated Components Metrics
         metrics.hot_pool_manager_updates.len(),
         if !metrics.hot_pool_manager_updates.is_empty() {
-            metrics.hot_pool_manager_updates.iter().sum::<usize>() as f64 / metrics.hot_pool_manager_updates.len() as f64
+            metrics.hot_pool_manager_updates.iter().sum::<usize>() as f64
+                / metrics.hot_pool_manager_updates.len() as f64
         } else {
             0.0
         },
         metrics.graph_updates_with_hot_pool.len(),
         if !metrics.graph_updates_with_hot_pool.is_empty() {
-            metrics.graph_updates_with_hot_pool.iter().sum::<usize>() as f64 / metrics.graph_updates_with_hot_pool.len() as f64
+            metrics.graph_updates_with_hot_pool.iter().sum::<usize>() as f64
+                / metrics.graph_updates_with_hot_pool.len() as f64
         } else {
             0.0
         },
         metrics.redis_cache_hits,
         metrics.redis_cache_misses,
         if metrics.redis_cache_hits + metrics.redis_cache_misses > 0 {
-            (metrics.redis_cache_hits as f64 / (metrics.redis_cache_hits + metrics.redis_cache_misses) as f64) * 100.0
+            (metrics.redis_cache_hits as f64
+                / (metrics.redis_cache_hits + metrics.redis_cache_misses) as f64)
+                * 100.0
         } else {
             0.0
         },
         metrics.blockstream_blocks_published,
         if !metrics.blockstream_active_subscribers.is_empty() {
-            metrics.blockstream_active_subscribers.iter().sum::<usize>() as f64 / metrics.blockstream_active_subscribers.len() as f64
+            metrics.blockstream_active_subscribers.iter().sum::<usize>() as f64
+                / metrics.blockstream_active_subscribers.len() as f64
         } else {
             0.0
         },
@@ -936,7 +1029,7 @@ fn generate_phase_performance(phase_events: &HashMap<String, Vec<u64>>) -> Strin
     if phase_events.is_empty() {
         return "No phase performance data available.\n".to_string();
     }
-    
+
     let mut sections = Vec::new();
     for (phase, durations) in phase_events {
         if durations.is_empty() {
@@ -948,13 +1041,17 @@ fn generate_phase_performance(phase_events: &HashMap<String, Vec<u64>>) -> Strin
         let p50 = sorted[sorted.len() / 2];
         let p95_idx = (sorted.len() as f64 * 0.95) as usize;
         let p95 = sorted[p95_idx.min(sorted.len() - 1)];
-        
+
         sections.push(format!(
             "- **{}**: {} events, avg {:.2}ms, p50 {}ms, p95 {}ms",
-            phase, durations.len(), avg, p50, p95
+            phase,
+            durations.len(),
+            avg,
+            p50,
+            p95
         ));
     }
-    
+
     if sections.is_empty() {
         "No phase performance data available.\n".to_string()
     } else {
@@ -963,14 +1060,17 @@ fn generate_phase_performance(phase_events: &HashMap<String, Vec<u64>>) -> Strin
 }
 
 /// ✅ Generate analysis of graph update strategy (full refresh vs incremental)
-fn generate_graph_update_strategy_analysis(phase_results: &HashMap<String, Vec<serde_json::Value>>) -> String {
+fn generate_graph_update_strategy_analysis(
+    phase_results: &HashMap<String, Vec<serde_json::Value>>,
+) -> String {
     if let Some(graph_updates) = phase_results.get("graph_updates") {
         let mut full_refresh_durations = Vec::new();
         let mut incremental_durations = Vec::new();
-        
+
         for result in graph_updates {
             if let Some(mode) = result.get("mode").and_then(|v| v.as_str()) {
-                if let Some(duration_ms) = result.get("state_staleness_ms").and_then(|v| v.as_u64()) {
+                if let Some(duration_ms) = result.get("state_staleness_ms").and_then(|v| v.as_u64())
+                {
                     match mode {
                         "full" => {
                             full_refresh_durations.push(duration_ms);
@@ -983,28 +1083,33 @@ fn generate_graph_update_strategy_analysis(phase_results: &HashMap<String, Vec<s
                 }
             }
         }
-        
+
         let mut sections = Vec::new();
-        
+
         if !full_refresh_durations.is_empty() {
-            let avg_full = full_refresh_durations.iter().sum::<u64>() as f64 / full_refresh_durations.len() as f64;
+            let avg_full = full_refresh_durations.iter().sum::<u64>() as f64
+                / full_refresh_durations.len() as f64;
             sections.push(format!(
                 "- **Full Refresh**: {} events, avg {:.2}ms",
-                full_refresh_durations.len(), avg_full
+                full_refresh_durations.len(),
+                avg_full
             ));
         }
-        
+
         if !incremental_durations.is_empty() {
-            let avg_inc = incremental_durations.iter().sum::<u64>() as f64 / incremental_durations.len() as f64;
+            let avg_inc = incremental_durations.iter().sum::<u64>() as f64
+                / incremental_durations.len() as f64;
             sections.push(format!(
                 "- **Incremental Update**: {} events, avg {:.2}ms",
-                incremental_durations.len(), avg_inc
+                incremental_durations.len(),
+                avg_inc
             ));
         }
-        
+
         if sections.is_empty() {
             // Fallback: use phase_end_events if mode metadata not available
-            "No graph update strategy metadata available (using phase_end_events data).\n".to_string()
+            "No graph update strategy metadata available (using phase_end_events data).\n"
+                .to_string()
         } else {
             sections.join("\n") + "\n"
         }
@@ -1017,11 +1122,14 @@ fn generate_pool_counts_table(pool_counts: &HashMap<String, i64>) -> String {
     if pool_counts.is_empty() {
         return "No pool data available.\n".to_string();
     }
-    
+
     let mut rows = Vec::new();
     for (dex, count) in pool_counts {
         rows.push(format!("| {} | {} |", dex, count));
     }
-    
-    format!("\n| DEX | Valid Pools |\n|-----|-------------|\n{}\n", rows.join("\n"))
+
+    format!(
+        "\n| DEX | Valid Pools |\n|-----|-------------|\n{}\n",
+        rows.join("\n")
+    )
 }

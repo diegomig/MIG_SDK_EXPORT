@@ -1,16 +1,15 @@
 // Redis Manager - Cache & Coordination Layer for Topology SDK
 // Implements pool state cache and route cache
 
-use anyhow::Result;
 #[cfg(feature = "redis")]
 use anyhow::Context;
+use anyhow::Result;
+use log::{debug, info};
 #[cfg(feature = "redis")]
 use redis::aio::ConnectionManager;
 #[cfg(feature = "redis")]
 use redis::{AsyncCommands, Client};
 use serde::{Deserialize, Serialize};
-use log::{info, debug};
-
 
 /// Cached pool state for Redis storage.
 ///
@@ -31,8 +30,8 @@ pub struct CachedPoolState {
 #[derive(Debug, Clone)]
 pub struct RedisConfig {
     pub url: String,
-    pub pool_state_ttl: u64,      // 10 seconds
-    pub route_cache_ttl: u64,      // 60 seconds
+    pub pool_state_ttl: u64,  // 10 seconds
+    pub route_cache_ttl: u64, // 60 seconds
 }
 
 impl Default for RedisConfig {
@@ -63,21 +62,22 @@ impl RedisManager {
     /// Create new Redis Manager
     #[cfg(feature = "redis")]
     pub async fn new(config: RedisConfig) -> Result<Self> {
-        let client = Client::open(config.url.as_str())
-            .context("Failed to create Redis client")?;
-        
+        let client = Client::open(config.url.as_str()).context("Failed to create Redis client")?;
+
         let conn = ConnectionManager::new(client.clone())
             .await
             .context("Failed to connect to Redis")?;
-        
+
         info!("✅ Redis Manager connected to {}", config.url);
-        
+
         Ok(Self { conn, config })
     }
-    
+
     #[cfg(not(feature = "redis"))]
     pub async fn new(config: RedisConfig) -> Result<Self> {
-        Err(anyhow::anyhow!("Redis feature not enabled. Enable with 'redis' feature flag."))
+        Err(anyhow::anyhow!(
+            "Redis feature not enabled. Enable with 'redis' feature flag."
+        ))
     }
 
     /// Create with default localhost config
@@ -86,22 +86,23 @@ impl RedisManager {
     }
 
     // ==================== POOL STATE CACHE ====================
-    
+
     /// Cache pool state
     /// FASE 2.1: Uses bincode for faster serialization than JSON
     #[cfg(feature = "redis")]
     pub async fn cache_pool_state(&mut self, state: &CachedPoolState) -> Result<()> {
         let key = format!("pool:state:{}", state.address);
         // FASE 2.1: Use bincode instead of JSON for faster serialization
-        let bytes = bincode::serialize(state)
-            .context("Failed to serialize pool state with bincode")?;
-        
-        self.conn.set_ex::<_, _, ()>(&key, &bytes, self.config.pool_state_ttl)
+        let bytes =
+            bincode::serialize(state).context("Failed to serialize pool state with bincode")?;
+
+        self.conn
+            .set_ex::<_, _, ()>(&key, &bytes, self.config.pool_state_ttl)
             .await
             .context("Failed to cache pool state")?;
-        
+
         debug!("💾 Cached state for pool {}", state.address);
-        
+
         Ok(())
     }
 
@@ -111,20 +112,23 @@ impl RedisManager {
     pub async fn get_pool_state(&mut self, address: &str) -> Result<Option<CachedPoolState>> {
         let start = std::time::Instant::now();
         let key = format!("pool:state:{}", address);
-        
+
         // FASE 2.1: Changed from String to Vec<u8> for binary data
-        let bytes: Option<Vec<u8>> = self.conn.get(&key).await
+        let bytes: Option<Vec<u8>> = self
+            .conn
+            .get(&key)
+            .await
             .context("Failed to get pool state from cache")?;
-        
+
         // FASE 3: Record metrics
         crate::metrics::increment_redis_operation("get_pool_state");
         crate::metrics::record_redis_operation_duration("get_pool_state", start.elapsed());
-        
+
         if let Some(bytes) = bytes {
             // FASE 2.1: Use bincode instead of JSON for faster deserialization
             let state: CachedPoolState = bincode::deserialize(bytes.as_slice())
                 .context("Failed to deserialize pool state with bincode")?;
-            
+
             debug!("📖 Cache hit for pool {}", address);
             crate::metrics::increment_redis_cache_hit();
             Ok(Some(state))
@@ -151,7 +155,7 @@ impl RedisManager {
     }
 
     // ==================== ROUTE CACHE ====================
-    
+
     #[cfg(not(feature = "redis"))]
     pub async fn batch_cache_pool_states(&mut self, _states: &[CachedPoolState]) -> Result<()> {
         Err(anyhow::anyhow!("Redis feature not enabled"))
@@ -161,16 +165,22 @@ impl RedisManager {
     /// FASE 2.1: Note: This method accepts String for backward compatibility
     /// For new code, consider using bincode serialization
     #[cfg(feature = "redis")]
-    pub async fn cache_route(&mut self, token0: &str, token1: &str, route_json: &str) -> Result<()> {
+    pub async fn cache_route(
+        &mut self,
+        token0: &str,
+        token1: &str,
+        route_json: &str,
+    ) -> Result<()> {
         let key = format!("route:{}:{}", token0, token1);
-        
+
         // FASE 2.1: Keep as String for backward compatibility (route_cache.rs still uses JSON)
-        self.conn.set_ex::<_, _, ()>(&key, route_json, self.config.route_cache_ttl)
+        self.conn
+            .set_ex::<_, _, ()>(&key, route_json, self.config.route_cache_ttl)
             .await
             .context("Failed to cache route")?;
-        
+
         debug!("🗺️  Cached route for pair {}/{}", token0, token1);
-        
+
         Ok(())
     }
 
@@ -180,15 +190,18 @@ impl RedisManager {
     pub async fn get_cached_route(&mut self, token0: &str, token1: &str) -> Result<Option<String>> {
         let start = std::time::Instant::now();
         let key = format!("route:{}:{}", token0, token1);
-        
+
         // FASE 2.1: Keep as String for backward compatibility
-        let route: Option<String> = self.conn.get(&key).await
+        let route: Option<String> = self
+            .conn
+            .get(&key)
+            .await
             .context("Failed to get cached route")?;
-        
+
         // FASE 3: Record metrics
         crate::metrics::increment_redis_operation("get_cached_route");
         crate::metrics::record_redis_operation_duration("get_cached_route", start.elapsed());
-        
+
         if route.is_some() {
             debug!("🗺️  Cache hit for route {}/{}", token0, token1);
             crate::metrics::increment_redis_cache_hit();
@@ -196,31 +209,44 @@ impl RedisManager {
             debug!("❌ Cache miss for route {}/{}", token0, token1);
             crate::metrics::increment_redis_cache_miss();
         }
-        
+
         Ok(route)
     }
 
     // ==================== EXECUTION TRACKER ====================
-    
+
     #[cfg(not(feature = "redis"))]
-    pub async fn get_cached_route(&mut self, _token0: &str, _token1: &str) -> Result<Option<String>> {
+    pub async fn get_cached_route(
+        &mut self,
+        _token0: &str,
+        _token1: &str,
+    ) -> Result<Option<String>> {
         Err(anyhow::anyhow!("Redis feature not enabled"))
     }
 
-
     /// Replace dynamic allowed pairs set for MVP auto filter
     #[cfg(feature = "redis")]
-    pub async fn set_mvp_allowed_pairs(&mut self, pairs: &[(String, String)], ttl_secs: u64) -> Result<()> {
+    pub async fn set_mvp_allowed_pairs(
+        &mut self,
+        pairs: &[(String, String)],
+        ttl_secs: u64,
+    ) -> Result<()> {
         let key = "mvp:allowed_pairs";
         // Replace the set atomically: DEL then SADD all members
         let _: () = self.conn.del(key).await.unwrap_or(());
         if !pairs.is_empty() {
             // Flatten pairs into "token0:token1" strings to store in a Redis set
             let members: Vec<String> = pairs.iter().map(|(a, b)| format!("{}:{}", a, b)).collect();
-            let _: () = self.conn.sadd(key, members).await
+            let _: () = self
+                .conn
+                .sadd(key, members)
+                .await
                 .context("Failed to SADD mvp:allowed_pairs")?;
             // Set TTL
-            let _: () = self.conn.expire(key, ttl_secs as i64).await
+            let _: () = self
+                .conn
+                .expire(key, ttl_secs as i64)
+                .await
                 .context("Failed to set TTL for mvp:allowed_pairs")?;
         }
         Ok(())
@@ -230,7 +256,10 @@ impl RedisManager {
     #[cfg(feature = "redis")]
     pub async fn get_mvp_allowed_pairs(&mut self) -> Result<Vec<(String, String)>> {
         let key = "mvp:allowed_pairs";
-        let members: Vec<String> = self.conn.smembers(key).await
+        let members: Vec<String> = self
+            .conn
+            .smembers(key)
+            .await
             .context("Failed to SMEMBERS mvp:allowed_pairs")?;
         let mut out = Vec::with_capacity(members.len());
         for m in members {
@@ -242,15 +271,14 @@ impl RedisManager {
     }
 
     // ==================== METRICS & MONITORING ====================
-    
+
     #[cfg(not(feature = "redis"))]
     pub async fn get_mvp_allowed_pairs(&mut self) -> Result<Vec<(String, String)>> {
         Err(anyhow::anyhow!("Redis feature not enabled"))
     }
 
-
     // ==================== HEALTH CHECK ====================
-    
+
     /// Test Redis connection
     #[cfg(feature = "redis")]
     pub async fn health_check(&mut self) -> Result<()> {
@@ -258,14 +286,14 @@ impl RedisManager {
             .query_async(&mut self.conn)
             .await
             .context("Redis health check failed")?;
-        
+
         if pong == "PONG" {
             Ok(())
         } else {
             anyhow::bail!("Unexpected Redis response: {}", pong)
         }
     }
-    
+
     #[cfg(not(feature = "redis"))]
     pub async fn health_check(&mut self) -> Result<()> {
         Err(anyhow::anyhow!("Redis feature not enabled"))
@@ -279,17 +307,17 @@ impl RedisManager {
             .query_async(&mut self.conn)
             .await
             .context("Failed to get Redis info")?;
-        
+
         Ok(info)
     }
-    
+
     #[cfg(not(feature = "redis"))]
     pub async fn get_info(&mut self) -> Result<String> {
         Err(anyhow::anyhow!("Redis feature not enabled"))
     }
 
     // ==================== CLEANUP ====================
-    
+
     #[cfg(not(feature = "redis"))]
     pub async fn flush_opportunities(&mut self) -> Result<()> {
         Ok(()) // Redis not available - no-op
@@ -298,19 +326,24 @@ impl RedisManager {
     /// Clear pool state cache
     #[cfg(feature = "redis")]
     pub async fn clear_pool_cache(&mut self) -> Result<()> {
-        let keys: Vec<String> = self.conn.keys("pool:state:*").await
+        let keys: Vec<String> = self
+            .conn
+            .keys("pool:state:*")
+            .await
             .context("Failed to get pool cache keys")?;
-        
+
         if !keys.is_empty() {
-            self.conn.del::<_, ()>(keys).await
+            self.conn
+                .del::<_, ()>(keys)
+                .await
                 .context("Failed to clear pool cache")?;
-            
+
             info!("🗑️  Cleared pool state cache");
         }
-        
+
         Ok(())
     }
-    
+
     #[cfg(not(feature = "redis"))]
     pub async fn clear_pool_cache(&mut self) -> Result<()> {
         Ok(()) // Redis not available - no-op
@@ -328,13 +361,12 @@ mod tests {
         assert!(manager.is_ok());
     }
 
-
     #[tokio::test]
     #[cfg(feature = "redis")]
     #[ignore] // Requires Redis running
     async fn test_pool_state_cache() {
         let mut manager = RedisManager::new_default().await.unwrap();
-        
+
         let state = CachedPoolState {
             address: "0x123".to_string(),
             reserve0: Some("1000000".to_string()),
@@ -345,12 +377,11 @@ mod tests {
             block_number: 12345,
             timestamp: chrono::Utc::now().timestamp(),
         };
-        
+
         manager.cache_pool_state(&state).await.unwrap();
-        
+
         let cached = manager.get_pool_state("0x123").await.unwrap();
         assert!(cached.is_some());
         assert_eq!(cached.unwrap().address, "0x123");
     }
 }
-

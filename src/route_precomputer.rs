@@ -11,23 +11,23 @@
 //! - Optimized batch retrieval using MGET
 //! - Integrates with PoolValidationCache for pool validation
 
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use ethers::types::Address;
-use log::{info, warn, debug, error};
+use log::{debug, error, info, warn};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
-use serde::{Serialize, Deserialize};
 
-use crate::router::{CandidateRoute, SwapStep, DexId, SwapKind};
-use crate::pools::Pool;
 use crate::database::DbPool;
 use crate::pool_validation_cache::PoolValidationCache;
+use crate::pools::Pool;
+use crate::router::{CandidateRoute, DexId, SwapKind, SwapStep};
 use std::sync::Arc;
 
 #[cfg(feature = "redis")]
-use redis::{Client, aio::ConnectionManager, Value};
-#[cfg(feature = "redis")]
 use redis::cmd as redis_cmd;
+#[cfg(feature = "redis")]
+use redis::{aio::ConnectionManager, Client, Value};
 
 /// Pre-computed triangular route with metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,7 +61,7 @@ pub struct SerializableSwapStep {
 
 mod address_serde {
     use ethers::types::Address;
-    use serde::{Serializer, Deserializer, Deserialize};
+    use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S>(address: &Address, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -105,7 +105,7 @@ impl SerializableSwapStep {
             "Balancer" => DexId::Balancer,
             _ => DexId::UniswapV2, // Default fallback
         };
-        
+
         // Parse SwapKind from string
         let kind = match self.kind.as_str() {
             "V2" => SwapKind::V2,
@@ -114,7 +114,7 @@ impl SerializableSwapStep {
             "Curve" => SwapKind::Curve,
             _ => SwapKind::V2, // Default fallback
         };
-        
+
         SwapStep {
             dex,
             pool: self.pool,
@@ -157,14 +157,13 @@ impl RoutePrecomputer {
         cache_ttl_seconds: u64,
         pool_validation_cache: Arc<PoolValidationCache>,
     ) -> Result<Self> {
-        let client = Client::open(redis_url)
-            .context("Failed to create Redis client")?;
+        let client = Client::open(redis_url).context("Failed to create Redis client")?;
         let redis = ConnectionManager::new(client)
             .await
             .context("Failed to connect to Redis")?;
-        
+
         info!("✅ RoutePrecomputer connected to Redis at {}", redis_url);
-        
+
         Ok(Self {
             redis,
             db_pool,
@@ -183,14 +182,17 @@ impl RoutePrecomputer {
         top_n: Option<usize>,
     ) -> Result<usize> {
         let start = Instant::now();
-        info!("🔍 Starting triangular route pre-computation with {} pools...", pools.len());
+        info!(
+            "🔍 Starting triangular route pre-computation with {} pools...",
+            pools.len()
+        );
 
         // Build token → pools index for fast lookup
         // FILTRO: Validar pools usando cache antes de incluirlos
         let mut token_to_pools: HashMap<Address, Vec<(Address, Pool)>> = HashMap::new();
         let mut processed_pools = 0;
         let mut invalid_pools_skipped = 0;
-        
+
         for pool in pools {
             // Validar pool usando cache
             let pool_addr = pool.address();
@@ -215,26 +217,41 @@ impl RoutePrecomputer {
                 }
             };
 
-            token_to_pools.entry(token0).or_default().push((token1, pool.clone()));
-            token_to_pools.entry(token1).or_default().push((token0, pool.clone()));
+            token_to_pools
+                .entry(token0)
+                .or_default()
+                .push((token1, pool.clone()));
+            token_to_pools
+                .entry(token1)
+                .or_default()
+                .push((token0, pool.clone()));
             processed_pools += 1;
-            
+
             // Log progress every 1000 pools
             if processed_pools % 1000 == 0 {
-                info!("📊 Processed {} pools, built token index...", processed_pools);
+                info!(
+                    "📊 Processed {} pools, built token index...",
+                    processed_pools
+                );
             }
         }
 
-        info!("📊 Built token index: {} unique tokens from {} processed pools ({} invalid pools skipped)", 
+        info!("📊 Built token index: {} unique tokens from {} processed pools ({} invalid pools skipped)",
               token_to_pools.len(), processed_pools, invalid_pools_skipped);
-        
+
         if token_to_pools.len() < 3 {
-            warn!("⚠️ Not enough tokens ({}) to form triangular routes. Need at least 3.", token_to_pools.len());
+            warn!(
+                "⚠️ Not enough tokens ({}) to form triangular routes. Need at least 3.",
+                token_to_pools.len()
+            );
             return Ok(0);
         }
-        
+
         if processed_pools < 3 {
-            warn!("⚠️ Not enough pools ({}) to form triangular routes. Need at least 3.", processed_pools);
+            warn!(
+                "⚠️ Not enough pools ({}) to form triangular routes. Need at least 3.",
+                processed_pools
+            );
             return Ok(0);
         }
 
@@ -247,60 +264,54 @@ impl RoutePrecomputer {
         for (token_in, pools_with_token_in) in &token_to_pools {
             for (token_mid, pool_a) in pools_with_token_in {
                 // pool_a connects token_in → token_mid
-                
+
                 // OPTIMIZATION: Early skip if token_mid has no connections
                 let pools_with_token_mid = match token_to_pools.get(token_mid) {
                     Some(pools) => pools,
                     None => continue,
                 };
-                
+
                 for (token_out, pool_b) in pools_with_token_mid {
                     if pool_b.address() == pool_a.address() {
                         continue; // Skip same pool
                     }
-                    
+
                     // pool_b connects token_mid → token_out
-                    
+
                     // OPTIMIZATION: Early skip if token_out has no connection back to token_in
                     let pools_with_token_out = match token_to_pools.get(token_out) {
                         Some(pools) => pools,
                         None => continue,
                     };
-                    
+
                     // OPTIMIZATION: Check if any pool closes the triangle before iterating
-                    let closes_triangle = pools_with_token_out.iter()
-                        .any(|(other_token, pool_c)| {
+                    let closes_triangle =
+                        pools_with_token_out.iter().any(|(other_token, pool_c)| {
                             *other_token == *token_in
                                 && pool_c.address() != pool_a.address()
                                 && pool_c.address() != pool_b.address()
                         });
-                    
+
                     if !closes_triangle {
                         continue; // Skip if no pool closes the triangle
                     }
-                    
+
                     // Now iterate to find the actual closing pool
                     for (other_token, pool_c) in pools_with_token_out {
-                        if pool_c.address() == pool_a.address() 
-                            || pool_c.address() == pool_b.address() {
+                        if pool_c.address() == pool_a.address()
+                            || pool_c.address() == pool_b.address()
+                        {
                             continue; // Skip already used pools
                         }
-                        
+
                         // Verify pool_c closes the triangle: token_out → token_in
                         if *other_token == *token_in {
                             // Create route ID (normalize to avoid duplicates)
-                            let mut pool_addrs = vec![
-                                pool_a.address(),
-                                pool_b.address(),
-                                pool_c.address(),
-                            ];
+                            let mut pool_addrs =
+                                vec![pool_a.address(), pool_b.address(), pool_c.address()];
                             pool_addrs.sort();
-                            let route_id = format!(
-                                "{}-{}-{}",
-                                pool_addrs[0],
-                                pool_addrs[1],
-                                pool_addrs[2]
-                            );
+                            let route_id =
+                                format!("{}-{}-{}", pool_addrs[0], pool_addrs[1], pool_addrs[2]);
 
                             // Skip duplicates
                             if route_ids.contains(&route_id) {
@@ -336,7 +347,7 @@ impl RoutePrecomputer {
 
                             routes.push(route);
                             routes_found += 1;
-                            
+
                             // Log progress every 1000 routes
                             if routes_found % 1000 == 0 {
                                 info!("📊 Found {} routes so far...", routes_found);
@@ -348,18 +359,30 @@ impl RoutePrecomputer {
         }
 
         if routes.is_empty() {
-            warn!("⚠️ No triangular routes found with {} pools and {} tokens. This may indicate insufficient connectivity between pools.", 
+            warn!("⚠️ No triangular routes found with {} pools and {} tokens. This may indicate insufficient connectivity between pools.",
                   processed_pools, token_to_pools.len());
         } else {
-            info!("✅ Pre-computed {} triangular routes in {:?}", routes.len(), start.elapsed());
+            info!(
+                "✅ Pre-computed {} triangular routes in {:?}",
+                routes.len(),
+                start.elapsed()
+            );
         }
 
         // Select top N routes by score
         let routes_to_cache = if let Some(n) = top_n {
             if routes.len() > n {
-                info!("📊 Selecting top {} routes from {} total routes", n, routes.len());
+                info!(
+                    "📊 Selecting top {} routes from {} total routes",
+                    n,
+                    routes.len()
+                );
                 // Sort by score descending and take top N
-                routes.sort_by(|a, b| b.route_score.partial_cmp(&a.route_score).unwrap_or(std::cmp::Ordering::Equal));
+                routes.sort_by(|a, b| {
+                    b.route_score
+                        .partial_cmp(&a.route_score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
                 routes.truncate(n);
                 routes
             } else {
@@ -371,7 +394,14 @@ impl RoutePrecomputer {
 
         // Cache top N routes to Redis
         let cached_count = if !routes_to_cache.is_empty() {
-            self.cache_routes_to_redis(&routes_to_cache, current_block, processed_pools, routes_found, routes_to_cache.len()).await?;
+            self.cache_routes_to_redis(
+                &routes_to_cache,
+                current_block,
+                processed_pools,
+                routes_found,
+                routes_to_cache.len(),
+            )
+            .await?;
             routes_to_cache.len()
         } else {
             0
@@ -427,7 +457,7 @@ impl RoutePrecomputer {
         // Enhanced scoring: combine liquidity estimates from all three pools
         let mut total_score = 0.0;
         let mut pool_count = 0;
-        
+
         for pool in [pool_a, pool_b, pool_c].iter() {
             let pool_score = match pool {
                 Pool::UniswapV2(p) => {
@@ -448,13 +478,13 @@ impl RoutePrecomputer {
                     0.0 // Curve/Balancer: skip for now
                 }
             };
-            
+
             if pool_score > 0.0 {
                 total_score += pool_score;
                 pool_count += 1;
             }
         }
-        
+
         // Average score across pools, with bonus for all pools having liquidity
         if pool_count > 0 {
             let avg_score = total_score / pool_count as f64;
@@ -492,9 +522,11 @@ impl RoutePrecomputer {
 
         // Use simpler key for top routes
         let key = "routes:top:latest";
-        
+
         // Clear old routes
-        let _: () = redis_cmd("DEL").arg(key).query_async(&mut self.redis)
+        let _: () = redis_cmd("DEL")
+            .arg(key)
+            .query_async(&mut self.redis)
             .await
             .context("Failed to clear old routes")?;
 
@@ -507,8 +539,8 @@ impl RoutePrecomputer {
         let serialized_routes: Vec<(String, String)> = routes
             .iter()
             .map(|route| {
-                let route_json = serde_json::to_string(route)
-                    .context("Failed to serialize route")?;
+                let route_json =
+                    serde_json::to_string(route).context("Failed to serialize route")?;
                 let route_key = format!("route:triangular:{}", route.route_id);
                 Ok((route_key, route_json))
             })
@@ -516,10 +548,14 @@ impl RoutePrecomputer {
 
         // BATCHING: Process in chunks to avoid Redis pipeline size limits
         const BATCH_SIZE: usize = 100;
-        
+
         let total_batches = (routes.len() + BATCH_SIZE - 1) / BATCH_SIZE;
-        debug!("🔄 Caching {} routes in {} batches of ~{}", 
-               routes.len(), total_batches, BATCH_SIZE);
+        debug!(
+            "🔄 Caching {} routes in {} batches of ~{}",
+            routes.len(),
+            total_batches,
+            BATCH_SIZE
+        );
 
         for (batch_idx, chunk) in routes.chunks(BATCH_SIZE).enumerate() {
             // Get corresponding serialized routes for this chunk
@@ -533,18 +569,28 @@ impl RoutePrecomputer {
             for (route_key, route_json) in chunk_serialized {
                 set_pipe.set_ex(route_key, route_json, self.cache_ttl_seconds);
             }
-            
+
             match set_pipe.query_async::<_, Vec<Value>>(&mut self.redis).await {
                 Ok(_) => {
-                    debug!("✅ SET batch {}/{} completed ({} routes)", 
-                           batch_idx + 1, total_batches, chunk.len());
+                    debug!(
+                        "✅ SET batch {}/{} completed ({} routes)",
+                        batch_idx + 1,
+                        total_batches,
+                        chunk.len()
+                    );
                 }
                 Err(e) => {
-                    error!("❌ SET batch {}/{} failed: {:?}", 
-                          batch_idx + 1, total_batches, e);
+                    error!(
+                        "❌ SET batch {}/{} failed: {:?}",
+                        batch_idx + 1,
+                        total_batches,
+                        e
+                    );
                     return Err(anyhow::anyhow!(
-                        "Failed to execute SET batch {}/{}: {}", 
-                        batch_idx + 1, total_batches, e
+                        "Failed to execute SET batch {}/{}: {}",
+                        batch_idx + 1,
+                        total_batches,
+                        e
                     ));
                 }
             }
@@ -552,13 +598,16 @@ impl RoutePrecomputer {
             // Execute ZADD operations
             let mut zadd_success = 0;
             let mut zadd_failed = 0;
-            
+
             for route in chunk.iter() {
                 // Sanitize score: validate if normal. If NaN or Inf, force to 0.0
                 let safe_score = if route.route_score.is_finite() {
                     route.route_score
                 } else {
-                    warn!("⚠️ Score is NaN or Inf for route {}, forcing to 0.0", route.route_id);
+                    warn!(
+                        "⚠️ Score is NaN or Inf for route {}, forcing to 0.0",
+                        route.route_id
+                    );
                     0.0
                 };
 
@@ -567,9 +616,9 @@ impl RoutePrecomputer {
 
                 // Execute with explicit protocol (Low Level)
                 match redis_cmd("ZADD")
-                    .arg(key)                    // Arg 1: Key
-                    .arg(score_int)               // Arg 2: Score (Integer, infallible)
-                    .arg(&route.route_id)        // Arg 3: Member
+                    .arg(key) // Arg 1: Key
+                    .arg(score_int) // Arg 2: Score (Integer, infallible)
+                    .arg(&route.route_id) // Arg 3: Member
                     .query_async::<_, ()>(&mut self.redis)
                     .await
                 {
@@ -578,23 +627,36 @@ impl RoutePrecomputer {
                     }
                     Err(e) => {
                         zadd_failed += 1;
-                        error!("❌ ZADD failed. Key: {}, Score (int): {}, Score (float): {}, ID: {}. Error: {:?}", 
+                        error!("❌ ZADD failed. Key: {}, Score (int): {}, Score (float): {}, ID: {}. Error: {:?}",
                               key, score_int, route.route_score, route.route_id, e);
                         // Continue with other routes instead of failing entire batch
                     }
                 }
             }
-            
+
             if zadd_failed > 0 {
-                warn!("⚠️ ZADD batch {}/{}: {} succeeded, {} failed", 
-                      batch_idx + 1, total_batches, zadd_success, zadd_failed);
+                warn!(
+                    "⚠️ ZADD batch {}/{}: {} succeeded, {} failed",
+                    batch_idx + 1,
+                    total_batches,
+                    zadd_success,
+                    zadd_failed
+                );
             } else {
-                debug!("✅ ZADD batch {}/{} completed ({} routes)", 
-                       batch_idx + 1, total_batches, chunk.len());
+                debug!(
+                    "✅ ZADD batch {}/{} completed ({} routes)",
+                    batch_idx + 1,
+                    total_batches,
+                    chunk.len()
+                );
             }
-            
-            debug!("✅ Batch {}/{} completed successfully (SET + ZADD, {} routes)", 
-                   batch_idx + 1, total_batches, chunk.len());
+
+            debug!(
+                "✅ Batch {}/{} completed successfully (SET + ZADD, {} routes)",
+                batch_idx + 1,
+                total_batches,
+                chunk.len()
+            );
         }
 
         // Keep sorted-set lifetime aligned with route payload lifetime
@@ -614,7 +676,7 @@ impl RoutePrecomputer {
             "computed_at": chrono::Utc::now().to_rfc3339(),
             "updated_at": chrono::Utc::now().timestamp(),
         });
-        
+
         redis_cmd("SET")
             .arg("routes:top:metadata")
             .arg(serde_json::to_string(&metadata)?)
@@ -625,8 +687,13 @@ impl RoutePrecomputer {
             .context("Failed to cache metadata")?;
 
         let duration = start.elapsed();
-        info!("✅ Cached {} top routes to Redis (from {} computed, {} pools processed) in {:?}", 
-              routes.len(), total_routes_computed, total_pools_processed, duration);
+        info!(
+            "✅ Cached {} top routes to Redis (from {} computed, {} pools processed) in {:?}",
+            routes.len(),
+            total_routes_computed,
+            total_pools_processed,
+            duration
+        );
         Ok(())
     }
 
@@ -704,7 +771,7 @@ impl RoutePrecomputer {
         let deserialize_duration = deserialize_start.elapsed();
         let total_duration = start.elapsed();
 
-        info!("📥 Retrieved {} top routes from Redis in {:?} (MGET: {:?}, deserialize: {:?}, parallel)", 
+        info!("📥 Retrieved {} top routes from Redis in {:?} (MGET: {:?}, deserialize: {:?}, parallel)",
               routes.len(), total_duration, mget_duration, deserialize_duration);
 
         if !dangling_ids.is_empty() {

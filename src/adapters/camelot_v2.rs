@@ -2,14 +2,16 @@ use anyhow::Result;
 use async_trait::async_trait;
 use ethers::prelude::*;
 use futures_util::stream::StreamExt;
-use std::sync::Arc;
 use log::{info, warn};
+use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 
+use crate::contracts::{
+    i_uniswap_v2_factory::PairCreatedFilter, IUniswapV2Factory, IUniswapV2Pair,
+};
 use crate::dex_adapter::{DexAdapter, PoolMeta};
+use crate::multicall::{Call, Multicall};
 use crate::pools::{Pool, UniswapV2Pool};
-use crate::contracts::{i_uniswap_v2_factory::PairCreatedFilter, IUniswapV2Factory, IUniswapV2Pair};
-use crate::multicall::{Multicall, Call};
 use crate::rpc_pool::RpcPool;
 
 const MAX_RETRIES: u32 = 10;
@@ -24,8 +26,18 @@ pub struct CamelotV2Adapter {
 }
 
 impl CamelotV2Adapter {
-    pub fn new(factory_address: Address, multicall_address: Address, multicall_batch_size: usize, rpc_pool: Arc<RpcPool>) -> Self {
-        Self { factory_address, multicall_address, multicall_batch_size, rpc_pool }
+    pub fn new(
+        factory_address: Address,
+        multicall_address: Address,
+        multicall_batch_size: usize,
+        rpc_pool: Arc<RpcPool>,
+    ) -> Self {
+        Self {
+            factory_address,
+            multicall_address,
+            multicall_batch_size,
+            rpc_pool,
+        }
     }
 }
 
@@ -42,12 +54,20 @@ impl DexAdapter for CamelotV2Adapter {
         chunk_size: u64,
         max_concurrency: usize,
     ) -> Result<Vec<PoolMeta>> {
-        info!("Discovering new {} pools from block {} to {}", self.name(), from_block, to_block);
-        
-        let block_chunks = (from_block..=to_block).step_by(chunk_size as usize).map(|start_block| {
-            let end_block = (start_block + chunk_size - 1).min(to_block);
-            (start_block, end_block)
-        }).collect::<Vec<_>>();
+        info!(
+            "Discovering new {} pools from block {} to {}",
+            self.name(),
+            from_block,
+            to_block
+        );
+
+        let block_chunks = (from_block..=to_block)
+            .step_by(chunk_size as usize)
+            .map(|start_block| {
+                let end_block = (start_block + chunk_size - 1).min(to_block);
+                (start_block, end_block)
+            })
+            .collect::<Vec<_>>();
 
         let futures_iter = block_chunks.into_iter().map(|(start_block, end_block)| {
             let self_clone = self.clone();
@@ -57,7 +77,7 @@ impl DexAdapter for CamelotV2Adapter {
                     // ✅ FLIGHT RECORDER: Use get_next_provider_with_endpoint to get endpoint for recording
                     let (provider, _permit, endpoint) = self_clone.rpc_pool.get_next_provider_with_endpoint().await?;
                     let factory = IUniswapV2Factory::new(self_clone.factory_address, Arc::clone(&provider));
-                    
+
                     // ✅ FLIGHT RECORDER: Use get_logs_with_recording instead of event_filter.query()
                     use ethers::types::{Filter, H256};
                     use std::str::FromStr;
@@ -69,19 +89,19 @@ impl DexAdapter for CamelotV2Adapter {
                         .from_block(start_block)
                         .to_block(end_block)
                         .topic0(pair_created_sig);
-                    
+
                     match self_clone.rpc_pool.get_logs_with_recording(&provider, &filter, &endpoint).await {
                         Ok(logs) => {
                             // Decode logs manually from topics and data
                             let mut decoded_logs = Vec::new();
-                            
+
                             for log in logs {
                                 // PairCreated: topics[0] = signature, topics[1] = token0, topics[2] = token1, data[12:32] = pair
                                 if log.topics.len() >= 3 && log.data.len() >= 32 {
                                     let token0 = Address::from_slice(&log.topics[1].as_bytes()[12..]);
                                     let token1 = Address::from_slice(&log.topics[2].as_bytes()[12..]);
                                     let pair = Address::from_slice(&log.data.as_ref()[12..32]);
-                                    
+
                                     // Create PairCreatedFilter manually
                                     decoded_logs.push(PairCreatedFilter {
                                         token_0: token0,
@@ -112,12 +132,17 @@ impl DexAdapter for CamelotV2Adapter {
             }
         });
 
-        let nested_logs: Vec<Result<Vec<PairCreatedFilter>>> = futures_util::stream::iter(futures_iter)
-            .buffer_unordered(max_concurrency)
-            .collect()
-            .await;
+        let nested_logs: Vec<Result<Vec<PairCreatedFilter>>> =
+            futures_util::stream::iter(futures_iter)
+                .buffer_unordered(max_concurrency)
+                .collect()
+                .await;
 
-        let logs: Vec<PairCreatedFilter> = nested_logs.into_iter().filter_map(Result::ok).flatten().collect();
+        let logs: Vec<PairCreatedFilter> = nested_logs
+            .into_iter()
+            .filter_map(Result::ok)
+            .flatten()
+            .collect();
 
         let discovered_pools: Vec<PoolMeta> = logs
             .into_iter()
@@ -133,7 +158,11 @@ impl DexAdapter for CamelotV2Adapter {
             })
             .collect();
 
-        info!("Discovered {} new {} pools.", discovered_pools.len(), self.name());
+        info!(
+            "Discovered {} new {} pools.",
+            discovered_pools.len(),
+            self.name()
+        );
         Ok(discovered_pools)
     }
 
@@ -141,13 +170,23 @@ impl DexAdapter for CamelotV2Adapter {
         let mut attempts = 0;
         loop {
             let (provider, _permit) = self.rpc_pool.get_next_provider().await?;
-            let multicall = Multicall::new(Arc::clone(&provider), self.multicall_address, self.multicall_batch_size);
+            let multicall = Multicall::new(
+                Arc::clone(&provider),
+                self.multicall_address,
+                self.multicall_batch_size,
+            );
 
-            let calls: Vec<_> = pools.iter().map(|pool| {
-                let pair_contract = IUniswapV2Pair::new(pool.address, Arc::clone(&provider));
-                let call_data = pair_contract.get_reserves().calldata().unwrap();
-                Call { target: pool.address, call_data }
-            }).collect();
+            let calls: Vec<_> = pools
+                .iter()
+                .map(|pool| {
+                    let pair_contract = IUniswapV2Pair::new(pool.address, Arc::clone(&provider));
+                    let call_data = pair_contract.get_reserves().calldata().unwrap();
+                    Call {
+                        target: pool.address,
+                        call_data,
+                    }
+                })
+                .collect();
 
             match multicall.run(calls, None).await {
                 Ok(results) => {
@@ -158,7 +197,16 @@ impl DexAdapter for CamelotV2Adapter {
                         if let Some(result_data) = results.get(i) {
                             if !result_data.is_empty() {
                                 if let Ok(decoded) = get_reserves_fn.decode_output(result_data) {
-                                    if let (Some(reserve0), Some(reserve1)) = (decoded[0].clone().into_uint().and_then(|u| u.try_into().ok()), decoded[1].clone().into_uint().and_then(|u| u.try_into().ok())) {
+                                    if let (Some(reserve0), Some(reserve1)) = (
+                                        decoded[0]
+                                            .clone()
+                                            .into_uint()
+                                            .and_then(|u| u.try_into().ok()),
+                                        decoded[1]
+                                            .clone()
+                                            .into_uint()
+                                            .and_then(|u| u.try_into().ok()),
+                                    ) {
                                         fetched_pools.push(Pool::UniswapV2(UniswapV2Pool {
                                             address: pool_meta.address,
                                             token0: pool_meta.token0,
@@ -176,14 +224,22 @@ impl DexAdapter for CamelotV2Adapter {
                 }
                 Err(e) => {
                     let error_string = e.to_string().to_lowercase();
-                    if error_string.contains("429") || error_string.contains("too many requests") || error_string.contains("limit exceeded") {
+                    if error_string.contains("429")
+                        || error_string.contains("too many requests")
+                        || error_string.contains("limit exceeded")
+                    {
                         self.rpc_pool.report_rate_limit_error(&provider);
                     } else {
                         self.rpc_pool.mark_as_unhealthy(&provider);
                     }
                     attempts += 1;
                     if attempts >= MAX_RETRIES {
-                        return Err(anyhow::anyhow!("Failed to fetch pool state for {} after {} attempts: {}", self.name(), attempts, e));
+                        return Err(anyhow::anyhow!(
+                            "Failed to fetch pool state for {} after {} attempts: {}",
+                            self.name(),
+                            attempts,
+                            e
+                        ));
                     }
                     warn!("Fetch pool state for {} failed, retrying in {:?}. Attempt {}/{}. Error: {}", self.name(), RETRY_DELAY, attempts, MAX_RETRIES, e);
                     sleep(RETRY_DELAY).await;

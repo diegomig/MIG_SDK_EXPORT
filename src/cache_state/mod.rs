@@ -5,4 +5,4 @@
 pub mod state_cache;
 
 // Re-export for convenience
-pub use state_cache::{CachedPoolState, StateCacheManager, CacheValidationResult};
+pub use state_cache::{CacheValidationResult, CachedPoolState, StateCacheManager};

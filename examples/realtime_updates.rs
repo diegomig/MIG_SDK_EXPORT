@@ -24,8 +24,12 @@
 //!
 //! Press Ctrl+C to stop.
 
+use anyhow::Result;
+use ethers::prelude::{Address, Http, Provider};
 use mig_topology_sdk::{
     adapters::{uniswap_v2::UniswapV2Adapter, uniswap_v3::UniswapV3Adapter},
+    block_number_cache::BlockNumberCache,
+    cache::CacheManager,
     database,
     dex_adapter::DexAdapter,
     graph_service::GraphService,
@@ -34,14 +38,10 @@ use mig_topology_sdk::{
     rpc_pool::RpcPool,
     settings::Settings,
     validator::PoolValidator,
-    cache::CacheManager,
-    block_number_cache::BlockNumberCache,
 };
-use anyhow::Result;
-use ethers::prelude::{Address, Provider, Http};
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::str::FromStr;
+use std::sync::Arc;
 use tokio::signal;
 use tokio::time::{interval, Duration};
 
@@ -97,10 +97,7 @@ async fn main() -> Result<()> {
         )));
     }
 
-    let validator = Arc::new(PoolValidator::new(
-        rpc_pool.clone(),
-        &settings.validator,
-    ));
+    let validator = Arc::new(PoolValidator::new(rpc_pool.clone(), &settings.validator));
 
     let orchestrator = Arc::new(Orchestrator::new(
         adapters,
@@ -113,13 +110,14 @@ async fn main() -> Result<()> {
     )?);
 
     // Create BlockNumberCache for RPC optimization (optional)
-    let (provider_for_cache, _permit, endpoint) = rpc_pool.get_next_provider_with_endpoint().await?;
+    let (provider_for_cache, _permit, endpoint) =
+        rpc_pool.get_next_provider_with_endpoint().await?;
     let block_number_cache = Arc::new(
         BlockNumberCache::new(
             provider_for_cache,
             Duration::from_secs(1), // Update interval: 1 second
         )
-        .with_flight_recorder(None, endpoint) // No flight recorder in realtime updates example
+        .with_flight_recorder(None, endpoint), // No flight recorder in realtime updates example
     );
 
     // Initialize graph service (no longer requires JitStateFetcher)
@@ -132,7 +130,7 @@ async fn main() -> Result<()> {
             Arc::new(settings.clone()),
         )
         .await?
-        .with_block_number_cache(block_number_cache)
+        .with_block_number_cache(block_number_cache),
     );
 
     println!("✅ SDK initialized");
@@ -173,7 +171,7 @@ async fn main() -> Result<()> {
         let mut interval = interval(Duration::from_secs(30)); // Print stats every 30 seconds
         loop {
             interval.tick().await;
-            
+
             // Get pool count from database
             match database::get_valid_pools_count_per_dex(&db_pool_stats).await {
                 Ok(counts) => {
@@ -183,9 +181,10 @@ async fn main() -> Result<()> {
                     for (dex, count) in &counts {
                         println!("   {}: {} pools", dex, count);
                     }
-                    
+
                     // Sample a few pool weights
-                    let sample_pools = database::load_active_pools(&db_pool_stats).await
+                    let sample_pools = database::load_active_pools(&db_pool_stats)
+                        .await
                         .unwrap_or_default();
                     if !sample_pools.is_empty() {
                         println!("\n   Sample pool weights:");
@@ -222,4 +221,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-
